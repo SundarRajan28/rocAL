@@ -507,7 +507,7 @@ MasterGraph::timing() {
     Timing t;
     for (auto loader_module : _loader_modules) {
         t = loader_module->timing();
-        t.image_process_time += _process_time.get_timing();
+        t.process_time += _process_time.get_timing();
         t.copy_to_output += _convert_time.get_timing();
         t.bb_process_time += _bencode_time.get_timing();
     }
