@@ -27,9 +27,9 @@ THE SOFTWARE.
 #include <vector>
 
 #include <lmdb.h>
-#include "meta_data_reader.h"
-#include "video_properties.h"
-#include "tensor.h"
+#include "meta_data/meta_data_reader.h"
+#include "readers/video/video_properties.h"
+#include "pipeline/tensor.h"
 
 #define CHECK_LMDB_RETURN_STATUS(status)                                                          \
     do {                                                                                          \
