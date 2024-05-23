@@ -51,12 +51,14 @@ void
 
 RocalMetaData
     ROCAL_API_CALL
-    rocalCreateLabelReader(RocalContext p_context, const char* source_path) {
+    rocalCreateLabelReader(RocalContext p_context, const char* source_path, const char* file_list_path) {
     if (!p_context)
         THROW("Invalid rocal context passed to rocalCreateLabelReader")
     auto context = static_cast<Context*>(p_context);
-
-    return context->master_graph->create_label_reader(source_path, MetaDataReaderType::FOLDER_BASED_LABEL_READER);
+    if (strlen(file_list_path) == 0)
+        return context->master_graph->create_label_reader(source_path, MetaDataReaderType::FOLDER_BASED_LABEL_READER);
+    else
+        return context->master_graph->create_label_reader(source_path, MetaDataReaderType::TEXT_FILE_META_DATA_READER, file_list_path);
 }
 
 RocalMetaData
@@ -509,28 +511,4 @@ RocalTensorList
         THROW("Invalid rocal context passed to rocalGetMatchedIndices")
     auto context = static_cast<Context*>(p_context);
     return context->master_graph->matched_index_meta_data();
-}
-
-RocalTensor
-    ROCAL_API_CALL
-    rocalROIRandomCrop(RocalContext p_context, RocalTensor p_input, RocalTensor roi_start, RocalTensor roi_end, std::vector<int> crop_shape) {
-     if ((p_context == nullptr) || (p_input == nullptr)) {
-        ERR("Invalid ROCAL context or invalid input tensor")
-    }
-    auto context = static_cast<Context*>(p_context);
-    auto input = static_cast<Tensor*>(p_input);
-    auto roi_start_tensor = static_cast<Tensor*>(roi_start);
-    auto roi_end_tensor = static_cast<Tensor*>(roi_end);
-    return context->master_graph->roi_random_crop(input, roi_start_tensor, roi_end_tensor, crop_shape.data());
-}
-
-RocalTensorList
-    ROCAL_API_CALL
-    rocalRandomObjectBbox(RocalContext p_context, RocalTensor p_input, std::string output_format, int k_largest, float foreground_prob) {
-     if ((p_context == nullptr) || (p_input == nullptr)) {
-        ERR("Invalid ROCAL context or invalid input tensor")
-    }
-    auto context = static_cast<Context*>(p_context);
-    auto input = static_cast<Tensor*>(p_input);
-    return context->master_graph->random_object_bbox(input, output_format, k_largest, foreground_prob);
 }

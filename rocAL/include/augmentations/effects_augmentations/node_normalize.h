@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,19 +21,19 @@ THE SOFTWARE.
 */
 
 #pragma once
+#include "pipeline/graph.h"
 #include "pipeline/node.h"
 #include "parameters/parameter_vx.h"
 
 class NormalizeNode : public Node {
    public:
-    NormalizeNode(const std::vector<Tensor *> &inputs,
-                            const std::vector<Tensor *> &outputs);
+    NormalizeNode(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs);
     NormalizeNode() = delete;
     void init(std::vector<unsigned> &axes, std::vector<float> &mean, std::vector<float> &std_dev, float scale, float shift);
 
    protected:
     void create_node() override;
-    void update_node() override {};
+    void update_node() override{};
 
    private:
     int _axis_mask = 0;

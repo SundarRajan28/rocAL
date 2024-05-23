@@ -135,13 +135,12 @@ def fog(*inputs, fog=0.5, device=None, output_layout=types.NHWC, output_dtype=ty
     return (fog_image)
 
 
-def brightness(*inputs, brightness=None, brightness_shift=None, conditional_execution=1, device=None, output_layout=types.NHWC, output_dtype=types.UINT8):
+def brightness(*inputs, brightness=None, brightness_shift=None, device=None, output_layout=types.NHWC, output_dtype=types.UINT8):
     """!Adjusts brightness of the image.
 
         @param inputs                                                                 the input image passed to the augmentation
         @param brightness (float, optional, default = None):                          brightness multiplier. Values >= 0 are accepted. For example: 0 - black image, 1 - no change, 2 - increase brightness twice
         @param brightness_shift (float, optional, default = None)                     brightness shift
-        @param conditional_execution (int, optional, default = None)                  controls the execution of the augmentation
         @param device (string, optional, default = None)                              Parameter unused for augmentation
         @param output_layout (int, optional, default = types.NHWC)                    tensor layout for the augmentation output
         @param output_dtype (int, optional, default = types.UINT8)                    tensor dtype for the augmentation output
@@ -152,25 +151,22 @@ def brightness(*inputs, brightness=None, brightness_shift=None, conditional_exec
         brightness, float) else brightness
     brightness_shift = b.createFloatParameter(brightness_shift) if isinstance(
         brightness_shift, float) else brightness_shift
-    conditional_execution = b.createIntParameter(conditional_execution) if isinstance(
-            conditional_execution, int) else conditional_execution
 
     # pybind call arguments
     kwargs_pybind = {"input_image": inputs[0], "is_output": False, "brightness": brightness, "brightness_shift": brightness_shift,
-                     "conditional_execution": conditional_execution, "output_layout": output_layout, "output_dtype": output_dtype}
+                     "output_layout": output_layout, "output_dtype": output_dtype}
     brightness_image = b.brightness(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (brightness_image)
 
 
-def brightness_fixed(*inputs, brightness=1.0, brightness_shift=0.0, conditional_execution=1, device=None,
+def brightness_fixed(*inputs, brightness=1.0, brightness_shift=0.0, device=None,
                      output_layout=types.NHWC, output_dtype=types.UINT8):
     """!Adjusts brightness of the image with fixed parameters.
 
         @param inputs                                                                 the input image passed to the augmentation
         @param brightness (float, optional, default = 1.0)                            brightness multiplier. Values >= 0 are accepted. For example: 0 - black image, 1 - no change, 2 - increase brightness twice
         @param brightness_shift (float, optional, default = 0.0)                      brightness shift
-        @param conditional_execution (int, optional, default = None)                  controls the execution of the augmentation
         @param device (string, optional, default = None)                              Parameter unused for augmentation
         @param output_layout (int, optional, default = types.NHWC)                    tensor layout for the augmentation output
         @param output_dtype (int, optional, default = types.UINT8)                    tensor dtype for the augmentation output
@@ -179,7 +175,7 @@ def brightness_fixed(*inputs, brightness=1.0, brightness_shift=0.0, conditional_
     """
     # pybind call arguments
     kwargs_pybind = {"input_image": inputs[0], "is_output": False, "brightness": brightness, "brightness_shift": brightness_shift,
-                     "conditional_execution": conditional_execution, "output_layout": output_layout, "output_dtype": output_dtype}
+                     "output_layout": output_layout, "output_dtype": output_dtype}
     brightness_image = b.brightnessFixed(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (brightness_image)
@@ -256,13 +252,12 @@ def contrast(*inputs, contrast=None, contrast_center=None, device=None, output_l
     return (contrast_image)
 
 
-def flip(*inputs, horizontal=0, vertical=0, depth=0, device=None, output_layout=types.NHWC, output_dtype=types.UINT8):
+def flip(*inputs, horizontal=0, vertical=0, device=None, output_layout=types.NHWC, output_dtype=types.UINT8):
     """!Flip images horizontally and/or vertically based on inputs.
 
         @param inputs                                                                 the input image passed to the augmentation
         @param horizontal (int, optional, default = 0)                                flip the horizontal dimension
         @param vertical (int, optional, default = 0)                                  flip the vertical dimension
-        @param depth (int, optional, default = 0)                                     flip the depth dimension
         @param device (string, optional, default = None)                              Parameter unused for augmentation
         @param output_layout (int, optional, default = types.NHWC)                    tensor layout for the augmentation output
         @param output_dtype (int, optional, default = types.UINT8)                    tensor dtype for the augmentation output
@@ -273,12 +268,10 @@ def flip(*inputs, horizontal=0, vertical=0, depth=0, device=None, output_layout=
         horizontal, int) else horizontal
     vertical = b.createIntParameter(
         vertical) if isinstance(vertical, int) else vertical
-    depth = b.createIntParameter(
-        depth) if isinstance(depth, int) else depth
 
     # pybind call arguments
     kwargs_pybind = {"input_image": inputs[0],
-                     "is_output": False, "horizontal": horizontal, "vertical": vertical, "depth": depth, "output_layout": output_layout, "output_dtype": output_dtype}
+                     "is_output": False, "horizontal": horizontal, "vertical": vertical, "output_layout": output_layout, "output_dtype": output_dtype}
     flip_image = b.flip(Pipeline._current_pipeline._handle,
                         *(kwargs_pybind.values()))
     return (flip_image)
@@ -829,32 +822,6 @@ def crop(*inputs, crop=[0, 0], crop_pos_x=0.5, crop_pos_y=0.5, crop_pos_z=0.5,
     return (cropped_image)
 
 
-def slice(*inputs, anchor = [], shape = [], dtype = types.FLOAT, end = [], fill_values = [0.0],  out_of_bounds_policy = types.PAD, device=None, output_layout=types.NHWC, output_dtype=types.UINT8):
-    """
-    The slice can be specified by proving the start and end coordinates, or start coordinates and shape of the slice. Both coordinates and shapes can be provided in absolute or relative terms.
-
-    The slice arguments can be specified by the following named arguments:
-
-    start: Slice start coordinates (absolute)
-
-    rel_start: Slice start coordinates (relative)
-
-    end: Slice end coordinates (absolute)
-
-    rel_end: Slice end coordinates (relative)
-
-    shape: Slice shape (absolute)
-
-    rel_shape: Slice shape (relative)
-
-    """
-
-    kwargs_pybind = {"input": inputs[0], "is_output": False, "anchor": anchor, "shape": shape, "fill_values": fill_values,
-                     "out_of_bounds_policy": out_of_bounds_policy, "output_layout": output_layout, "output_dtype": output_dtype}
-    slice_output = b.slice(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
-    return slice_output
-
-
 def color_twist(*inputs, brightness=1.0, contrast=1.0, hue=0.0,
                 saturation=1.0, device=None, output_layout=types.NHWC, output_dtype=types.UINT8):
     """!Adjusts the brightness, hue and saturation of the images.
@@ -1089,7 +1056,17 @@ def box_iou_matcher(*inputs, anchors, high_threshold=0.5,
     return (box_iou_matcher, [])
 
 
-def external_source(*inputs, source, device=None, color_format=types.RGB, random_shuffle=False, mode=types.EXTSOURCE_FNAME, max_width=2000, max_height=2000):
+def external_source(source, device=None, color_format=types.RGB, random_shuffle=False, mode=types.EXTSOURCE_FNAME, max_width=2000, max_height=2000):
+    """
+    External Source Reader - User can pass a iterator or callable source.
+    @param source (iterator or callable)                                 The source iterator or callable object.
+    @param device (string, optional, default = None)                     Parameter unused for augmentation
+    @color_format (type, optional, default = RGB)                        Tensor color format for the reader. Default is RGB format.
+    @random_shuffle (bool, optional, default= False)                     Data would be randomly shuffled if set to True.
+    @mode (type, optional, default = EXTSOURCE_FNAME)                    The Default mode would be External Source File Name. The External Source Mode can be FileName, Raw Compressed, Raw Uncompressed.
+    @max_width (int, optional, default = 2000)                           The Max Width to which the source images would be decoded to.
+    @max_height (int, optional, default = 2000)                          The Max Height to which the source images would be decoded to.
+    """
     # pybind call arguments
     Pipeline._current_pipeline._is_external_source_operator = True
     Pipeline._current_pipeline._external_source = iter(source)
@@ -1101,6 +1078,130 @@ def external_source(*inputs, source, device=None, color_format=types.RGB, random
     external_source_operator = b.externalFileSource(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (external_source_operator, [])  # Labels is Empty
+
+def preemphasis_filter(*inputs, border=types.CLAMP, preemph_coeff=0.97, output_dtype=types.FLOAT):
+    """
+    Applies preemphasis filter to the input data.
+    This filter, in simple form, can be expressed by the formula:
+    Y[t] = X[t] - coeff * X[t-1]    if t > 1
+    Y[t] = X[t] - coeff * X_border  if t == 0
+    with X and Y being the input and output signal, respectively.
+    The value of X_border depends on the border argument:
+    X_border = 0                    if border_type == 'zero'
+    X_border = X[0]                 if border_type == 'clamp'
+    X_border = X[1]                 if border_type == 'reflect'
+
+    @param inputs (list)                                                 The input sample to which preEmphasisFilter is applied.
+    @param border                                                        The border value policy. The possible values are "CLAMP", "ZERO", "REFLECT"
+    @param preemph_coeff (float , optional, default = 0.97)              The preEmphasisFilter co-efficient.
+    @output_dtype (type, optional, default = types.FLOAT)                Tensor dtype for the augmentation output. Default is types.FLOAT.
+    """
+    preemph_coeff_float_param = b.createFloatParameter(preemph_coeff)
+    kwargs_pybind = {"input_audio0": inputs[0], "is_output": False,
+                    "preemph_coeff": preemph_coeff_float_param, "preemph_border_type": border,
+                    "output_dtype" :output_dtype}
+    preemphasis_output = b.preEmphasisFilter(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
+    return (preemphasis_output)
+
+def spectrogram(*inputs, bytes_per_sample_hint = [0], center_windows = True, layout = types.NFT, nfft = None, power = 2, reflect_padding = True, seed = -1, window_fn = [], window_length = 512, window_step = 256, output_dtype = types.FLOAT) :
+    """
+    Produces a spectrogram from a 1D signal.
+    Input data is expected to be one channel - The shape of the input can be (srcLength, 1) of the data type float32.
+    """
+    kwargs_pybind = {"input_audio": inputs[0], "is_output": False, "window_fn": window_fn, "center_windows": center_windows, "reflect_padding": reflect_padding,
+                     "power": power, "nfft": nfft, "window_length": window_length, "window_step": window_step, "output_layout": layout, "output_dtype": output_dtype}
+    spectrogram_output = b.spectrogram(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return (spectrogram_output)
+
+def to_decibels(*inputs, bytes_per_sample_hint = [0], cutoff_db = -200.0, multiplier = 10.0, reference = 0.0, seed = -1, output_dtype = types.FLOAT):
+    '''
+    Converts a magnitude (real, positive) to the decibel scale.
+
+    Conversion is done according to the following formula:
+
+    min_ratio = pow(10, cutoff_db / multiplier)
+    out[i] = multiplier * log10( max(min_ratio, input[i] / reference) )
+    '''
+    kwargs_pybind = {"input_audio": inputs[0], "is_output": False, "cutoff_db": cutoff_db, "multiplier": multiplier, "reference_magnitude": reference, "rocal_tensor_output_type": output_dtype}
+    decibel_scale = b.toDecibels(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return decibel_scale
+
+def resample(*inputs, resample_rate=None, output_datatype=types.FLOAT, resample_hint=-1, quality=50.0):
+    """
+    Resamples an audio signal.
+
+    The resampling is achieved by applying a sinc filter with Hann window with an extent controlled by the quality argument.
+    """
+    kwargs_pybind = {"input_audio": inputs[0], "resample_rate": resample_rate, "is_output": False, "resample_hint": resample_hint, "quality": quality, "output_datatype": output_datatype}
+    resample_output = b.resample(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
+    return resample_output
+
+def tensor_add_tensor_float(*inputs, output_datatype=types.FLOAT):
+    """
+    Adds a rocalTensor with another rocalTensor.
+    """
+    kwargs_pybind = {"input_audio": inputs[0], "input_image1": inputs[1], "is_output": False, "output_datatype": output_datatype}
+    tensor_add_tensor_float = b.tensorAddTensor(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
+    return tensor_add_tensor_float
+
+def tensor_mul_scalar_float(*inputs, scalar=1.0, output_datatype=types.FLOAT):
+    """
+    Multiplies a rocalTensor with a scalar float value.
+    """
+    kwargs_pybind = {"input_audio": inputs[0], "is_output": False, "scalar": scalar, "output_datatype": output_datatype}
+    tensor_mul_scalar_float = b.tensorMulScalar(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
+    return tensor_mul_scalar_float
+
+def nonsilent_region(*inputs, cutoff_db = -60, reference_power = 0.0, reset_interval = 8192, window_length = 2048):
+    """
+    Performs leading and trailing silence detection in an audio buffer.
+    @param cutoff_db (float)                                      The threshold, in dB, below which the signal is considered silent.
+    @param reference_power (float)                                The reference power that is utilized to convert the signal to dB.
+    @param reset_interval (int)                                   The number of samples after which the moving mean average is recalculated aiming to avoid loss of precision.
+    @param window_length (int)                                    Size of the sliding window used in calculating the short-term power of the signal.
+    """
+    kwargs_pybind = {"input_audio": inputs[0], "is_output": False, "cutoff_db": cutoff_db,
+                     "reference_power": reference_power, "reset_interval": reset_interval, "window_length": window_length}
+    non_silent_region_output = b.nonSilentRegionDetection(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return non_silent_region_output
+
+def slice(*inputs, anchor = [], shape = [], fill_values = [0.0],  out_of_bounds_policy = types.ERROR, rocal_tensor_output_type = types.FLOAT):
+    """
+    The slice can be specified by proving the start and end coordinates, or start coordinates and shape of the slice. Both coordinates and shapes can be provided in absolute or relative terms.
+    @param anchor (int or 1D RocalTensor of ints)                                      The absolute starting co-ordinate points of the slice.
+    @param shape (int or 1D RocalTensor of ints)                                       The absolute co-ordinate for the dimensions of the slice.
+    @param fill_values (float or list of float)                                        Determines the padding values and is only relevant if out_of_bounds_policy is “pad” policy.
+    @param out_of_bounds_policy ("error", "pad", "trim_to_shape")                      Determines the policy when slicing the out of bounds area of the input.
+    @param rocal_tensor_output_type (float)                                            Output DataType of the Tensor
+    """
+
+    kwargs_pybind = {"input_audio0": inputs[0], "is_output": False, "anchor": anchor[0], "shape": shape[0], "fill_values": fill_values,
+                     "out_of_bounds_policy": out_of_bounds_policy, "rocal_tensor_output_type": rocal_tensor_output_type}
+    slice_output = b.slice(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return slice_output
+
+def normalize(*inputs, axes=[], mean=[], stddev=[], scale=1.0, shift=0.0, output_datatype=types.FLOAT):
+    '''
+    Normalizes the input by removing the mean and dividing by the standard deviation.
+    The mean and standard deviation can be calculated internally for the specified subset of axes or can be externally provided as the mean and stddev arguments.
+    The normalization is done following the formula:
+    out = scale * (in - mean) / stddev + shift
+    The formula assumes that out and in are equally shaped tensors, but mean and stddev might be either tensors of same shape, scalars, or a mix of these.
+    '''
+    kwargs_pybind = {"input_tensor": inputs[0], "axes": axes, "mean": mean, "stddev": stddev, "is_output": False,
+                     "scale": scale, "shift": shift, "output_datatype": output_datatype}
+    normalize_output = b.normalize(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return normalize_output
+
+def mel_filter_bank(*inputs, bytes_per_sample_hint = [0], freq_high = 0.0, freq_low = 0.0, mel_formula = types.SLANEY, nfilter = 128, normalize = True, sample_rate = 44100.0, seed = -1, output_datatype = types.FLOAT):
+    '''
+    Converts a spectrogram to a mel spectrogram by applying a bank of triangular filters.
+    The frequency ('f') dimension is selected from the input layout. In case of no layout, “f”, “ft”, or “*ft” is assumed, depending on the number of dimensions.
+    '''
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": False, "freq_high": freq_high, "freq_low": freq_low, "mel_formula": mel_formula,
+                     "nfilter": nfilter, "normalize": normalize, "sample_rate": sample_rate, "output_datatype": output_datatype}
+    mel_filter_bank_output = b.melFilterBank(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return mel_filter_bank_output
 
 def set_layout(*inputs, output_layout=types.NHWC):
     """!Adjusts brightness of the image.
@@ -1116,67 +1217,8 @@ def set_layout(*inputs, output_layout=types.NHWC):
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (new_output)
 
-def gaussian_noise(*inputs, mean=0.0, std_dev=1.0, seed=0, conditional_execution=1, device=None, output_layout=types.NHWC, output_dtype=types.UINT8):
-    """!Applies Gaussian noise to the input image.
-
-        @param inputs (list)                                                          The input image to which salt-and-pepper noise is applied.
-        @param mean (float, optional, default = 0.0)                                  Mean used for noise generation. Default is 0.0.
-        @param std_dev (float, optional, default = 1.0)                               Standard deviation used for noise generation. Default is 1.0.
-        @param seed (int, optional, default = 0)                                      Random seed. Default is 0.
-        @param conditional_execution (int, optional, default = None)                  controls the execution of the augmentation
-        @param device (string, optional, default = None)                              Parameter unused for augmentation
-        @param output_layout (int, optional, default = types.NHWC)                    Tensor layout for the augmentation output. Default is types.NHWC.
-        @param output_dtype (int, optional, default = types.UINT*)                    Tensor dtype for the augmentation output. Default is types.UINT8.
-
-        @return    images with Gaussian noise added.
-    """
-    mean = b.createFloatParameter(
-        mean) if isinstance(mean, float) else mean
-    std_dev = b.createFloatParameter(
-        std_dev) if isinstance(std_dev, float) else std_dev
-    conditional_execution = b.createIntParameter(conditional_execution) if isinstance(
-                conditional_execution, int) else conditional_execution
-
-    # pybind call arguments
-    kwargs_pybind = {"input_image": inputs[0], "is_output": False, "mean": mean, "std_dev": std_dev,
-                     "seed": seed, "conditional_execution": conditional_execution, "output_layout": output_layout, "output_dtype": output_dtype}
-    noise_added_image = b.gaussianNoise(
-        Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
-    return (noise_added_image)
-
-def roi_random_crop(*inputs, roi_start, roi_end, crop_shape):
-    # pybind call arguments
-    kwargs_pybind = {"input_image": inputs[0], "roi_start": roi_start, "roi_end": roi_end, "crop_shape": crop_shape}
-    anchor = b.roiRandomCrop(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
-    return (anchor)
-
-def random_object_bbox(*inputs, format='anchor_shape', background=0, cache_objects=False, classes=[], foreground_prob=1.0, ignore_class=False, k_largest=-1, seed=0, threshold=[]):
-    # pybind call arguments
-    kwargs_pybind = {"input_image": inputs[0], "format": format, "k_largest": k_largest, "foreground_prob": foreground_prob}
-    selected_roi = b.randomObjectBbox(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
-    if format == "box":
-        return (selected_roi)
-    elif format == "anchor_shape" or format == "start_end":
-        return (selected_roi[0], selected_roi[1])
-    else:
-        print('Wrong format passed to random_object_bbox')
-        return ()
-
 def transpose(*inputs, perm=[], output_layout=types.NHWC, output_dtype=types.UINT8):
     # pybind call arguments
     kwargs_pybind = {"input_image": inputs[0], "perm": perm, "is_output": False, "output_layout": output_layout, "output_dtype": output_dtype}
     transposed_image = b.transpose(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (transposed_image)
-
-def normalize(*inputs, axes=[], mean=[], stddev=[], scale=1.0, shift=0.0, output_layout=types.NHWC, output_dtype=types.UINT8):
-    # pybind call arguments
-    kwargs_pybind = {"input_image": inputs[0], "axes": axes, "mean": mean, "stddev": stddev, "is_output": False,
-                     "scale": scale, "shift": shift, "output_layout": output_layout, "output_dtype": output_dtype}
-    normalized_image = b.normalize(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
-    return (normalized_image)
-
-def cast(*inputs, output_dtype=types.UINT8):
-    # pybind call arguments
-    kwargs_pybind = {"input_image": inputs[0], "is_output": False, "output_dtype": output_dtype}
-    normalized_image = b.normalize(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
-    return (normalized_image)

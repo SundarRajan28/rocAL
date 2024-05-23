@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,16 +21,22 @@ THE SOFTWARE.
 */
 
 #pragma once
-#include "pipeline/node.h"
 #include "pipeline/graph.h"
+#include "pipeline/node.h"
+#include "rocal_api_types.h"
 
-class CastNode : public Node
-{
-public:
-    CastNode(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs);
-    CastNode() = delete;
+class ResampleNode : public Node {
+   public:
+    ResampleNode(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs);
+    ResampleNode() = delete;
+    void init(Tensor *resample_rate, float quality);
 
-protected:
+   protected:
     void create_node() override;
-    void update_node() override {};
+    void update_node() override;
+
+   private:
+    Tensor *_output_resample_rate;
+    float _quality;
+    vx_array _src_sample_rate_array;
 };

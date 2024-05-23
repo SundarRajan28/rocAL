@@ -106,13 +106,14 @@ class MasterGraph {
     RocalMemType mem_type();
     size_t last_batch_padded_size();
     void release();
+    vx_context get_vx_context() { return _context; }
     template <typename T>
     std::shared_ptr<T> add_node(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs);
     template <typename T, typename M>
     std::shared_ptr<T> meta_add_node(std::shared_ptr<M> node);
     Tensor *create_tensor(const TensorInfo &info, bool is_output);
     Tensor *create_loader_output_tensor(const TensorInfo &info);
-    std::vector<rocalTensorList *> create_label_reader(const char *source_path, MetaDataReaderType reader_type);
+    std::vector<rocalTensorList *> create_label_reader(const char *source_path, MetaDataReaderType reader_type, const char *file_list_path = "");
     std::vector<rocalTensorList *> create_video_label_reader(const char *source_path, MetaDataReaderType reader_type, unsigned sequence_length, unsigned frame_step, unsigned frame_stride, bool file_list_frame_num = true);
     std::vector<rocalTensorList *> create_coco_meta_data_reader(const char *source_path, bool is_output, MetaDataReaderType reader_type, MetaDataType label_type, bool ltrb_bbox = true, bool is_box_encoder = false,
                                                                 bool avoid_class_remapping = false, bool aspect_ratio_grouping = false, bool is_box_iou_matcher = false, float sigma = 0.0, unsigned pose_output_width = 0, unsigned pose_output_height = 0);
@@ -146,26 +147,8 @@ class MasterGraph {
                              RocalTensorlayout layout, bool eos);
     void set_external_source_reader_flag() { _external_source_reader = true; }
     size_t bounding_box_batch_count(pMetaDataBatch meta_data_batch);
-    Tensor* roi_random_crop(Tensor *input, Tensor *roi_start, Tensor *roi_end, int *crop_shape);
-    TensorList* random_object_bbox(Tensor *input, std::string output_format, int k_largest = -1, float foreground_prob=1.0);
-    void update_roi_random_crop();
-    void update_random_object_bbox();
-    void findLabels(const u_int8_t *input, std::set<int> &labels, std::vector<int> roi_size, std::vector<size_t> max_size);
-    void filterByLabel(const u_int8_t *input, std::vector<int> &output, std::vector<int> roi_size, std::vector<size_t> max_size, int label);
-    void labelRow(const int *label_base, const int *in_row, int *out_row, unsigned length);
-    int disjointGetGroup(const int &x) { return x; }
-    int disjointSetGroup(int &x, int new_id);
-    int disjointFind(int *items, int x);
-    int disjointMerge(int *items, int x, int y);
-    void mergeRow(int *label_base, const int *in1, const int *in2, int *out1, int *out2, unsigned n);
-    int labelMergeFunc(const u_int8_t *input, std::vector<int> &size, std::vector<size_t> &max_size, std::vector<int> &output_compact, std::mt19937 &rng);
-    bool hit(std::vector<unsigned>& hits, unsigned idx);
-    void get_label_boundingboxes(std::vector<std::vector<std::vector<unsigned>>> &boxes, std::vector<std::pair<unsigned, unsigned>> ranges, std::vector<unsigned> hits, int *in, std::vector<int> origin, unsigned width);
-    int pick_box(std::vector<std::vector<std::vector<unsigned>>> boxes, std::mt19937 &rng, int k_largest = -1);
 #if ENABLE_OPENCL
-        cl_command_queue get_ocl_cmd_q() {
-        return _device.resources()->cmd_queue;
-    }
+    cl_command_queue get_ocl_cmd_q() { return _device.resources()->cmd_queue; }
 #endif
    private:
     Status update_node_parameters();
@@ -247,23 +230,6 @@ class MasterGraph {
     // box IoU matcher variables
     bool _is_box_iou_matcher = false;                                             // bool variable to set the box iou matcher
     BoxIouMatcherInfo _iou_matcher_info;
-    bool _is_roi_random_crop = false;
-    bool _is_random_object_bbox = false;
-    int *_crop_shape_batch = nullptr;
-    int *_roi_batch = nullptr;
-    Tensor *_roi_random_crop_tensor = nullptr;
-    Tensor *_roi_start_tensor = nullptr;
-    Tensor *_roi_end_tensor = nullptr;
-    Tensor *_random_object_bbox_label_tensor = nullptr;
-    Tensor *_random_object_bbox_box1_tensor = nullptr;
-    Tensor *_random_object_bbox_box2_tensor = nullptr;
-    void *_roi_random_crop_buf = nullptr;
-    void *_random_object_bbox_box1_buf = nullptr;
-    void *_random_object_bbox_box2_buf = nullptr;
-    TensorList _random_object_bbox_tensor_list;
-    std::string _random_object_bbox_output_format;
-    int _k_largest;
-    float _foreground_prob;
 #if ENABLE_HIP
     BoxEncoderGpu *_box_encoder_gpu = nullptr;
 #endif

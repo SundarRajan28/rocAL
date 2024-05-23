@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2019 - 2023 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,28 +21,14 @@ THE SOFTWARE.
 */
 
 #pragma once
-
 #include "pipeline/graph.h"
 #include "pipeline/node.h"
-#include "parameters/parameter_factory.h"
-#include "parameters/parameter_vx.h"
-
-class GaussianNoiseNode : public Node {
+class DownmixNode : public Node {
    public:
-    GaussianNoiseNode(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs);
-    GaussianNoiseNode() = delete;
-    void init(float mean, float std_dev, int seed, int conditional_execution);
-    void init(FloatParam *mean_param, FloatParam *stddev_param, int seed, IntParam *condition_execution_param);
+    DownmixNode(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs);
+    DownmixNode() = delete;
 
    protected:
     void create_node() override;
     void update_node() override;
-
-   private:
-    ParameterVX<float> _mean, _stddev;
-    ParameterVX<int> _conditional_execution;
-    constexpr static float MEAN_RANGE[2] = {0, 5};
-    constexpr static float STDDEV_RANGE[2] = {1, 5};
-    constexpr static int CONDITIONAL_EXECUTION_RANGE[2] = {0, 1};
-    int _seed;
 };

@@ -36,9 +36,10 @@ THE SOFTWARE.
  * \ingroup group_rocal_meta_data
  * \param [in] rocal_context rocal context
  * \param [in] source_path path to the folder that contains the dataset or metadata file
+ * \param file_list_path is the path to file list that contains the file names and its corresponding labels
  * \return RocalMetaData object, can be used to inquire about the rocal's output (processed) tensors
  */
-extern "C" RocalMetaData ROCAL_API_CALL rocalCreateLabelReader(RocalContext rocal_context, const char* source_path);
+extern "C" RocalMetaData ROCAL_API_CALL rocalCreateLabelReader(RocalContext rocal_context, const char* source_path, const char* file_list_path = "");
 
 /*! \brief creates video label reader
  * \ingroup group_rocal_meta_data
@@ -314,24 +315,5 @@ extern "C" void ROCAL_API_CALL rocalBoxIouMatcher(RocalContext p_context, std::v
  * \return RocalTensorList of matched indices
  */
 extern "C" RocalTensorList ROCAL_API_CALL rocalGetMatchedIndices(RocalContext p_context);
-
-/*! \brief initialize the values required for ROI Random crop
- * \ingroup group_rocal_meta_data
- * \param [in] rocal_context rocal context
- * \param [in] crop_shape_batch
- * \param [in] roi_begin_batch
- * \param [in] input_shape_batch
- * \param [in] roi_end_batch
- * \param [out] anchor The generated anchor tensor
- */
-extern "C" RocalTensor ROCAL_API_CALL rocalROIRandomCrop(RocalContext p_context, RocalTensor p_input, RocalTensor roi_start, RocalTensor roi_end, std::vector<int> crop_shape);
-
-/*! \brief initialize the values required for ROI Random crop
- * \ingroup group_rocal_meta_data
- * \param [in] rocal_context rocal context
- * \param [in] p_input
- * \param [out] anchor The generated anchor tensor
- */
-extern "C" RocalTensorList ROCAL_API_CALL rocalRandomObjectBbox(RocalContext p_context, RocalTensor p_input, std::string output_format="anchor_shape", int k_largest = -1, float foreground_prob = 1.0);
 
 #endif  // MIVISIONX_ROCAL_API_META_DATA_H

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,25 +20,28 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include <vx_ext_rpp.h>
-#include "augmentations/node_cast.h"
-#include "pipeline/exception.h"
+#pragma once
+#include <random>
 
-CastNode::CastNode(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs) :
-        Node(inputs, outputs) {}
+#include "pipeline/batch_rng.h"
+#include "pipeline/graph.h"
+#include "pipeline/node.h"
 
-void CastNode::create_node() {
-    if(_node)
-        return;
+class UniformDistributionNode : public Node {
+   public:
+    UniformDistributionNode(const std::vector<Tensor *> &inputs,
+                            const std::vector<Tensor *> &outputs);
+    UniformDistributionNode() = delete;
+    void init(std::vector<float> &range);
+    void update_param();
 
-    int input_layout = (int)_inputs[0]->info().layout();
-    int roi_type = static_cast<int>(_inputs[0]->info().roi_type());
-    vx_scalar input_layout_vx = vxCreateScalar(vxGetContext((vx_reference)_graph->get()), VX_TYPE_INT32, &input_layout);
-    vx_scalar roi_type_vx = vxCreateScalar(vxGetContext((vx_reference)_graph->get()), VX_TYPE_INT32, &roi_type);
-    _node = vxExtRppCast(_graph->get(), _inputs[0]->handle(), _inputs[0]->get_roi_tensor(), _outputs[0]->handle(), input_layout_vx, roi_type_vx);
+   protected:
+    void create_node() override;
+    void update_node() override;
 
-    vx_status status;
-    if((status = vxGetStatus((vx_reference)_node)) != VX_SUCCESS)
-        THROW("Adding the copy (vxCastNode) node failed: " + TOSTR(status))
-
-}
+   private:
+    float _min, _max;
+    std::uniform_real_distribution<float> _dist_uniform;  // uniform distribution
+    std::vector<float> _uniform_distribution_array;
+    BatchRNG<std::mt19937> _rngs = {89, 2};  // Random Seed, Random BatchSize for initialization
+};

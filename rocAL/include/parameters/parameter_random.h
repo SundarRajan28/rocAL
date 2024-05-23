@@ -181,7 +181,7 @@ struct CustomRand : public Parameter<T> {
             _updated_val = _values[0];
         } else {
             // Generate a value between [0 1]
-            double rand_val = (double) _generator() / (double) _generator.max();
+            double rand_val = (double)_generator() / (double)_generator.max();
 
             // Find the iterators pointing to the first element bigger than idx
             auto it = std::upper_bound(_comltv_dist.begin(), _comltv_dist.end(), rand_val);
