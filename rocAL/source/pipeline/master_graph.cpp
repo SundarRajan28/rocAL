@@ -1098,10 +1098,7 @@ void MasterGraph::output_routine_multiple_loaders() {
             }*/
             _process_time.start();
             for (auto& graph : _graphs) {
-                graph->schedule();
-            }
-            for (auto& graph : _graphs) {
-                graph->wait();
+                graph->process();
             }
             _process_time.end();
 
