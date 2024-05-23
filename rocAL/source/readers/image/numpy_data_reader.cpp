@@ -89,7 +89,8 @@ void NumpyDataReader::incremenet_read_ptr() {
 }
 
 size_t NumpyDataReader::open() {
-    auto file_path = _file_names[_curr_file_idx];  // Get next file name
+    auto file_path = _file_names[_curr_file_idx];  // Get current file name
+    _curr_file_header = _file_headers[_curr_file_idx]; // Get current file header
     incremenet_read_ptr();
     _last_id = file_path;
     auto last_slash_idx = _last_id.find_last_of("\\/");
@@ -97,10 +98,10 @@ size_t NumpyDataReader::open() {
         _last_id.erase(0, last_slash_idx + 1);
     }
 
-    auto ret = GetFromCache(file_path, _file_headers[_curr_file_idx]);
+    auto ret = GetFromCache(file_path, _curr_file_header);
     if (!ret) {
-        ParseHeader(_file_headers[_curr_file_idx], file_path);
-        UpdateCache(file_path, _file_headers[_curr_file_idx]);
+        ParseHeader(_curr_file_header, file_path);
+        UpdateCache(file_path, _curr_file_header);
     } else {
         _current_fPtr = std::fopen(file_path.c_str(), "rb");
         if (_current_fPtr == nullptr)
@@ -108,7 +109,7 @@ size_t NumpyDataReader::open() {
     }
     fseek(_current_fPtr, 0, SEEK_SET);  // Take the file pointer back to the start
 
-    return _file_headers[_curr_file_idx].nbytes();
+    return _curr_file_header.nbytes();
 }
 
 bool NumpyDataReader::GetFromCache(const std::string& file_name, NumpyHeaderData& header) {
@@ -321,10 +322,10 @@ size_t NumpyDataReader::read_numpy_data(void* buf, size_t read_size, std::vector
     // Requested read size bigger than the file size? just read as many bytes as the file size
     read_size = (read_size > _current_file_size) ? _current_file_size : read_size;
 
-    if (std::fseek(_current_fPtr, _file_headers[_curr_file_idx]._data_offset, SEEK_SET))
+    if (std::fseek(_current_fPtr, _curr_file_header._data_offset, SEEK_SET))
         THROW("Seek operation failed: " + std::strerror(errno));
 
-    auto shape = _file_headers[_curr_file_idx].shape();
+    auto shape = _curr_file_header.shape();
     auto num_dims = max_shape.size();
     std::vector<unsigned> strides(num_dims + 1);
     strides[num_dims] = 1;
@@ -333,21 +334,21 @@ size_t NumpyDataReader::read_numpy_data(void* buf, size_t read_size, std::vector
     }
 
     size_t actual_read_size = 0;
-    if (_file_headers[_curr_file_idx].type() == RocalTensorDataType::UINT8)
+    if (_curr_file_header.type() == RocalTensorDataType::UINT8)
         actual_read_size = ParseNumpyData<u_int8_t>((u_int8_t*)buf, strides, shape);
-    if (_file_headers[_curr_file_idx].type() == RocalTensorDataType::UINT32)
+    if (_curr_file_header.type() == RocalTensorDataType::UINT32)
         actual_read_size = ParseNumpyData<u_int32_t>((u_int32_t*)buf, strides, shape);
-    if (_file_headers[_curr_file_idx].type() == RocalTensorDataType::INT8)
+    if (_curr_file_header.type() == RocalTensorDataType::INT8)
         actual_read_size = ParseNumpyData<int8_t>((int8_t*)buf, strides, shape);
-    if (_file_headers[_curr_file_idx].type() == RocalTensorDataType::INT32)
+    if (_curr_file_header.type() == RocalTensorDataType::INT32)
         actual_read_size = ParseNumpyData<int32_t>((int32_t*)buf, strides, shape);
-    if (_file_headers[_curr_file_idx].type() == RocalTensorDataType::FP16)
+    if (_curr_file_header.type() == RocalTensorDataType::FP16)
 #if defined(AMD_FP16_SUPPORT)
         actual_read_size = ParseNumpyData<half>((half*)buf, strides, shape);
 #else
         THROW("FLOAT16 type tensor not supported")
 #endif
-    if (_file_headers[_curr_file_idx].type() == RocalTensorDataType::FP32)
+    if (_curr_file_header.type() == RocalTensorDataType::FP32)
         actual_read_size = ParseNumpyData<float>((float*)buf, strides, shape);
 
     return actual_read_size;
@@ -369,7 +370,7 @@ size_t NumpyDataReader::ParseNumpyData(T* buf, std::vector<unsigned> strides, st
 }
 
 const NumpyHeaderData NumpyDataReader::get_numpy_header_data() {
-    return _file_headers[_curr_file_idx];
+    return _curr_file_header;
 }
 
 size_t NumpyDataReader::read_data(unsigned char* buf, size_t read_size) {
@@ -379,10 +380,10 @@ size_t NumpyDataReader::read_data(unsigned char* buf, size_t read_size) {
     // Requested read size bigger than the file size? just read as many bytes as the file size
     read_size = (read_size > _current_file_size) ? _current_file_size : read_size;
 
-    if (std::fseek(_current_fPtr, _file_headers[_curr_file_idx]._data_offset, SEEK_SET))
+    if (std::fseek(_current_fPtr, _curr_file_header._data_offset, SEEK_SET))
         THROW("Seek operation failed: " + std::strerror(errno));
 
-    size_t actual_read_size = std::fread(buf, 1, _file_headers[_curr_file_idx].nbytes(), _current_fPtr);
+    size_t actual_read_size = std::fread(buf, 1, _curr_file_header.nbytes(), _current_fPtr);
     return actual_read_size;
 }
 

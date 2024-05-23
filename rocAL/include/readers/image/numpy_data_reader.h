@@ -83,6 +83,7 @@ class NumpyDataReader : public Reader {
     unsigned _curr_file_idx;
     FILE* _current_fPtr;
     unsigned _current_file_size;
+    NumpyHeaderData _curr_file_header;
     std::string _last_id;
     std::string _last_file_name;
     size_t _shard_id = 0;
