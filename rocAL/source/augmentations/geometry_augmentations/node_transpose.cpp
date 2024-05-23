@@ -21,8 +21,8 @@ THE SOFTWARE.
 */
 
 #include <vx_ext_rpp.h>
-#include "node_transpose.h"
-#include "exception.h"
+#include "augmentations/geometry_augmentations/node_transpose.h"
+#include "pipeline/exception.h"
 
 TransposeNode::TransposeNode(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs) : Node(inputs, outputs) {}
 

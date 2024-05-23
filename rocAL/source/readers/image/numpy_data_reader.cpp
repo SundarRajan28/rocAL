@@ -20,17 +20,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "numpy_data_reader.h"
+#include "readers/image/numpy_data_reader.h"
 
-#include <commons.h>
+#include "pipeline/commons.h"
+#include "pipeline/filesystem.h"
 
 #include <algorithm>
 #include <numeric>
 #include <random>
-#include <boost/filesystem.hpp>
 #include <cassert>
-
-namespace filesys = boost::filesystem;
 
 NumpyDataReader::NumpyDataReader() : _shuffle_time("shuffle_time", DBG_TIMING) {
     _src_dir = nullptr;

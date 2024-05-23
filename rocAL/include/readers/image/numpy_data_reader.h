@@ -26,10 +26,11 @@ THE SOFTWARE.
 #include <memory>
 #include <string>
 #include <vector>
+#include <mutex>
 
-#include "commons.h"
+#include "pipeline/commons.h"
 #include "image_reader.h"
-#include "timing_debug.h"
+#include "pipeline/timing_debug.h"
 
 class NumpyDataReader : public Reader {
    public:
@@ -123,5 +124,5 @@ class NumpyDataReader : public Reader {
     void incremenet_file_id() { _file_id++; }
     void replicate_last_image_to_fill_last_shard();
     void replicate_last_batch_to_pad_partial_shard();
-    TimingDBG _shuffle_time;
+    TimingDbg _shuffle_time;
 };

@@ -99,6 +99,13 @@ struct RocalJointsData {
     RotationBatch rotation_batch;
 };
 
+struct ROIxywh {
+    unsigned x;
+    unsigned y;
+    unsigned w;
+    unsigned h;
+};
+
 /*! \brief  rocAL Status enum
  * \ingroup group_rocal_types
  */
@@ -258,7 +265,11 @@ enum RocalDecoderType {
     ROCAL_DECODER_VIDEO_FFMPEG_SW = 3,
     /*! \brief AMD ROCAL_DECODER_VIDEO_FFMPEG_HW
      */
-    ROCAL_DECODER_VIDEO_FFMPEG_HW = 4
+    ROCAL_DECODER_VIDEO_FFMPEG_HW = 4,
+    /*! \brief AMD ROCAL_DECODER_AUDIO_GENERIC
+     * Uses SndFile library to read audio files
+     */
+    ROCAL_DECODER_AUDIO_GENERIC = 5
 };
 
 enum RocalOutputMemType {
@@ -354,6 +365,36 @@ enum class RocalROICordsType {
     /*! \brief ROCAL_XYWH
      */
     ROCAL_XYWH = 1
+};
+
+/*! \brief RocalExternalSourceMode struct
+ * \ingroup group_rocal_types
+ */
+enum RocalExternalSourceMode {
+    /*! \brief list of filename passed as input
+     */
+    ROCAL_EXTSOURCE_FNAME = 0,
+    /*! \brief compressed raw buffer passed as input
+     */
+    ROCAL_EXTSOURCE_RAW_COMPRESSED = 1,
+    /*! \brief uncompressed raw buffer passed as input
+     */
+    ROCAL_EXTSOURCE_RAW_UNCOMPRESSED = 2,
+};
+
+/*! \brief Tensor Last Batch Policies
+ *  \ingroup group_rocal_types
+ */
+enum RocalLastBatchPolicy {
+    /*! \brief ROCAL_LAST_BATCH_FILL - The last batch is filled by either repeating the last sample or by wrapping up the data set.
+     */
+    ROCAL_LAST_BATCH_FILL = 0,
+    /*! \brief ROCAL_LAST_BATCH_DROP - The last batch is dropped if there are not enough samples from the current epoch.
+     */
+    ROCAL_LAST_BATCH_DROP = 1,
+    /*! \brief ROCAL_LAST_BATCH_PARTIAL - The last batch is partially filled with the remaining data from the current epoch, keeping the rest of the samples empty. (currently this policy works similar to FILL in rocAL, PARTIAL policy needs to be handled from python end)
+     */
+    ROCAL_LAST_BATCH_PARTIAL = 2
 };
 
 /*! \brief Tensor padding types

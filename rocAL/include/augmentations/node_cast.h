@@ -21,8 +21,8 @@ THE SOFTWARE.
 */
 
 #pragma once
-#include "node.h"
-#include "graph.h"
+#include "pipeline/node.h"
+#include "pipeline/graph.h"
 
 class CastNode : public Node
 {

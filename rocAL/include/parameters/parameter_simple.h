@@ -21,7 +21,7 @@ THE SOFTWARE.
 */
 
 #pragma once
-#include "parameter.h"
+#include "parameters/parameter.h"
 
 template <typename T>
 class SimpleParameter : public Parameter<T> {
@@ -37,7 +37,7 @@ class SimpleParameter : public Parameter<T> {
     }
 
     std::vector<T> get_array() override {
-        return _array;
+        return param_values;
     }
 
     void update_single_value(T new_val) {
@@ -45,24 +45,19 @@ class SimpleParameter : public Parameter<T> {
     }
 
     void update_array(T new_val) {
-        for (uint i = 0; i < _batch_size; i++) {
-            update_single_value(new_val);
-            _array[i] = _val;
-        }
+        std::fill(param_values.begin(), param_values.end(), _val);
     }
 
     int update(T new_val) {
-        if (_array.size() > 0)
+        if (param_values.size())
             update_array(new_val);
         else
             update_single_value(new_val);
         return 0;
     }
 
-    void create_array(unsigned batch_size) override {
-        if (_array.size() == 0)
-            _array.resize(batch_size);
-        _batch_size = batch_size;
+    void create_array(unsigned array_size) override {
+        if (param_values.size() == 0) param_values.resize(array_size);
         update(_val);
     }
 
@@ -74,8 +69,7 @@ class SimpleParameter : public Parameter<T> {
 
    private:
     T _val;
-    std::vector<T> _array;
-    unsigned _batch_size;
+    std::vector<T> param_values;  //!< The updated values will be used in parameter_vx.h file
 };
 using pIntParam = std::shared_ptr<SimpleParameter<int>>;
 using pFloatParam = std::shared_ptr<SimpleParameter<float>>;

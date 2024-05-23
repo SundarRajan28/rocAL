@@ -91,6 +91,16 @@ from rocal_pybind.types import LANCZOS_INTERPOLATION
 from rocal_pybind.types import GAUSSIAN_INTERPOLATION
 from rocal_pybind.types import TRIANGULAR_INTERPOLATION
 
+#     Rocal External Source Mode
+from rocal_pybind.types import EXTSOURCE_FNAME
+from rocal_pybind.types import EXTSOURCE_RAW_COMPRESSED
+from rocal_pybind.types import EXTSOURCE_RAW_UNCOMPRESSED
+
+#     RocalLastBatchPolicy
+from rocal_pybind.types import LAST_BATCH_FILL
+from rocal_pybind.types import LAST_BATCH_DROP
+from rocal_pybind.types import LAST_BATCH_PARTIAL
+
 from rocal_pybind.types import TRIMTOSHAPE
 from rocal_pybind.types import PAD
 
@@ -154,8 +164,14 @@ _known_types = {
     TRIMTOSHAPE: ("TRIMTOSHAPE", TRIMTOSHAPE),
     PAD: ("PAD", PAD),
 
-}
+    EXTSOURCE_FNAME: ("EXTSOURCE_FNAME", EXTSOURCE_FNAME),
+    EXTSOURCE_RAW_COMPRESSED: ("EXTSOURCE_RAW_COMPRESSED", EXTSOURCE_RAW_COMPRESSED),
+    EXTSOURCE_RAW_UNCOMPRESSED: ("EXTSOURCE_RAW_UNCOMPRESSED", EXTSOURCE_RAW_UNCOMPRESSED),
 
+    LAST_BATCH_FILL : ("LAST_BATCH_FILL", LAST_BATCH_FILL),
+    LAST_BATCH_DROP : ("LAST_BATCH_DROP", LAST_BATCH_DROP),
+    LAST_BATCH_PARTIAL : ("LAST_BATCH_PARTIAL", LAST_BATCH_PARTIAL),
+}
 
 def data_type_function(dtype):
     """!Converts a given data type identifier to its corresponding known type.

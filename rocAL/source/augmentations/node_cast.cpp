@@ -21,8 +21,8 @@ THE SOFTWARE.
 */
 
 #include <vx_ext_rpp.h>
-#include "node_cast.h"
-#include "exception.h"
+#include "augmentations/node_cast.h"
+#include "pipeline/exception.h"
 
 CastNode::CastNode(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs) :
         Node(inputs, outputs) {}

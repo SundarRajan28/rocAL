@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 #include <vector>
 
-#include "parameter_factory.h"
+#include "parameters/parameter_factory.h"
 
 template <typename T>
 class ParameterVX {
@@ -55,7 +55,7 @@ class ParameterVX {
         _batch_size = batch_size;
         _param->create_array(_batch_size);
         _array = vxCreateArray(vxGetContext((vx_reference)graph->get()), data_type, _batch_size);
-        auto status  = vxAddArrayItems(_array, _batch_size, get_array().data(), sizeof(T));
+        auto status = vxAddArrayItems(_array, _batch_size, get_array().data(), sizeof(T));
         if (status != 0)
             THROW(" vxAddArrayItems failed in create_array (ParameterVX): " + TOSTR(status))
         update_array();
