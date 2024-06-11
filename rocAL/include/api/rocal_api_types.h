@@ -81,6 +81,10 @@ struct TimingInfo {
     long long unsigned decode_time;
     long long unsigned process_time;
     long long unsigned transfer_time;
+    long long unsigned wait_if_empty_time;
+    long long unsigned wait_if_full_time;
+    long long unsigned wait_if_empty_time_counter;
+    long long unsigned wait_if_full_time_counter;
 };
 
 // HRNet training expects meta data (joints_data) in below format, so added here as a type for exposing to user

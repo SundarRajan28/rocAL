@@ -47,6 +47,15 @@ class ROCALNumpyIterator(object):
 
     def __next__(self):
         if self.loader.rocal_run() != 0:
+            timing_info = self.loader.timing_info()
+            print("Load     time ::", timing_info.load_time / 1000000)
+            print("Decode   time ::", timing_info.decode_time / 1000000)
+            print("Process  time ::", timing_info.process_time / 1000000)
+            print("Transfer time ::", timing_info.transfer_time / 1000000)
+            print("Wait if empty time ::", timing_info.wait_if_empty_time / 1000000)
+            print("Wait if full time ::", timing_info.wait_if_full_time / 1000000)
+            print("Wait if empty time counter ::", timing_info.wait_if_empty_time_counter)
+            print("Wait if full time counter ::", timing_info.wait_if_full_time_counter)
             raise StopIteration
         self.output_tensor_list = self.loader.get_output_tensors()
 

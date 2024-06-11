@@ -108,7 +108,7 @@ TimingInfo
     auto context = static_cast<Context *>(p_context);
     auto info = context->timing();
     // INFO("bbencode time "+ TOSTR(info.bb_process_time)); //to display time taken for bbox encoder
-    return {info.read_time, info.decode_time, info.process_time, info.copy_to_output};
+    return {info.read_time, info.decode_time, info.process_time, info.copy_to_output, info.wait_if_empty_time, info.wait_if_full_time, info.wait_if_empty_time_counter, info.wait_if_full_time_counter};
 }
 
 RocalMetaData

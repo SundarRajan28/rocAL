@@ -168,7 +168,11 @@ PYBIND11_MODULE(rocal_pybind, m) {
         .def_readwrite("load_time", &TimingInfo::load_time)
         .def_readwrite("decode_time", &TimingInfo::decode_time)
         .def_readwrite("process_time", &TimingInfo::process_time)
-        .def_readwrite("transfer_time", &TimingInfo::transfer_time);
+        .def_readwrite("transfer_time", &TimingInfo::transfer_time)
+        .def_readwrite("wait_if_empty_time",&TimingInfo::wait_if_empty_time)
+        .def_readwrite("wait_if_full_time",&TimingInfo::wait_if_full_time)
+        .def_readwrite("wait_if_empty_time_counter",&TimingInfo::wait_if_empty_time_counter)
+        .def_readwrite("wait_if_full_time_counter",&TimingInfo::wait_if_full_time_counter);
     py::class_<rocalTensor>(m, "rocalTensor")
         .def(
             "__add__",

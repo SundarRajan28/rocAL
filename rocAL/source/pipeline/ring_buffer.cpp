@@ -29,13 +29,18 @@ RingBuffer::RingBuffer(unsigned buffer_depth) : BUFF_DEPTH(buffer_depth),
                                                 _dev_roi_buffers(buffer_depth),
                                                 _host_roi_buffers(buffer_depth),
                                                 _dev_bbox_buffer(buffer_depth),
-                                                _dev_labels_buffer(buffer_depth) {
+                                                _dev_labels_buffer(buffer_depth),
+                                                _rb_block_if_empty_time("Ring Buffer Block IF Empty Time"),
+                                                _rb_block_if_full_time("Ring Buffer Block IF Full Time"),
+                                                _rb_block_if_empty_time_counter(0),
+                                                _rb_block_if_full_time_counter(0) {
     reset();
 }
 
 void RingBuffer::block_if_empty() {
     std::unique_lock<std::mutex> lock(_lock);
     if (empty()) {  // if the current read buffer is being written wait on it
+        _rb_block_if_empty_time_counter++;
         if (_dont_block)
             return;
         _wait_for_load.wait(lock);
@@ -46,6 +51,7 @@ void RingBuffer::block_if_full() {
     std::unique_lock<std::mutex> lock(_lock);
     // Write the whole buffer except for the last spot which is being read by the reader thread
     if (full()) {
+        _rb_block_if_full_time_counter++;
         if (_dont_block)
             return;
         _wait_for_unload.wait(lock);
@@ -53,40 +59,52 @@ void RingBuffer::block_if_full() {
 }
 
 std::pair<std::vector<void *>, std::vector<unsigned *>> RingBuffer::get_read_buffers() {
+    _rb_block_if_empty_time.start();
     block_if_empty();
+    _rb_block_if_empty_time.end();
     if ((_mem_type == RocalMemType::OCL) || (_mem_type == RocalMemType::HIP))
         return std::make_pair(_dev_sub_buffer[_read_ptr], _dev_roi_buffers[_read_ptr]);
     return std::make_pair(_host_sub_buffers[_read_ptr], _host_roi_buffers[_read_ptr]);
 }
 
 std::pair<void *, void *> RingBuffer::get_box_encode_read_buffers() {
+    _rb_block_if_empty_time.start();
     block_if_empty();
+    _rb_block_if_empty_time.end();
     if ((_mem_type == RocalMemType::OCL) || (_mem_type == RocalMemType::HIP))
         return std::make_pair(_dev_bbox_buffer[_read_ptr], _dev_labels_buffer[_read_ptr]);
     return std::make_pair(_host_meta_data_buffers[_read_ptr][1], _host_meta_data_buffers[_read_ptr][0]);
 }
 
 std::pair<std::vector<void *>, std::vector<unsigned *>> RingBuffer::get_write_buffers() {
+    _rb_block_if_full_time.start();
     block_if_full();
+    _rb_block_if_full_time.end();
     if ((_mem_type == RocalMemType::OCL) || (_mem_type == RocalMemType::HIP))
         return std::make_pair(_dev_sub_buffer[_write_ptr], _dev_roi_buffers[_write_ptr]);
     return std::make_pair(_host_sub_buffers[_write_ptr], _host_roi_buffers[_write_ptr]);
 }
 
 std::pair<void *, void *> RingBuffer::get_box_encode_write_buffers() {
+    _rb_block_if_full_time.start();
     block_if_full();
+    _rb_block_if_full_time.end();
     if ((_mem_type == RocalMemType::OCL) || (_mem_type == RocalMemType::HIP))
         return std::make_pair(_dev_bbox_buffer[_write_ptr], _dev_labels_buffer[_write_ptr]);
     return std::make_pair(_host_meta_data_buffers[_write_ptr][1], _host_meta_data_buffers[_write_ptr][0]);
 }
 
 std::vector<void *> RingBuffer::get_meta_read_buffers() {
+    _rb_block_if_empty_time.start();
     block_if_empty();
+    _rb_block_if_empty_time.end();
     return _host_meta_data_buffers[_read_ptr];
 }
 
 std::vector<void *> RingBuffer::get_meta_write_buffers() {
+    _rb_block_if_full_time.start();
     block_if_full();
+    _rb_block_if_full_time.end();
     return _host_meta_data_buffers[_write_ptr];
 }
 
@@ -411,7 +429,9 @@ void RingBuffer::rellocate_meta_data_buffer(void *buffer, size_t buffer_size, un
 }
 
 MetaDataNamePair &RingBuffer::get_meta_data() {
+    _rb_block_if_empty_time.start();
     block_if_empty();
+    _rb_block_if_empty_time.end();
     std::unique_lock<std::mutex> lock(_names_buff_lock);
     if (_level != _meta_ring_buffer.size())
         THROW("ring buffer internals error, image and metadata sizes not the same " + TOSTR(_level) + " != " + TOSTR(_meta_ring_buffer.size()))

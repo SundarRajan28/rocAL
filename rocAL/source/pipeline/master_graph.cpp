@@ -475,10 +475,19 @@ MasterGraph::last_batch_padded_size() {
 
 Timing
 MasterGraph::timing() {
-    Timing t = _loader_module->timing();
+    Timing t;
+    for (auto loader_module : _loader_modules) {
+        Timing loader_time = loader_module->timing();
+        t.read_time = (t.read_time > loader_time.read_time) ? t.read_time : loader_time.read_time;
+        t.process_time += loader_time.process_time;
+    }
     t.process_time += _process_time.get_timing();
     t.copy_to_output += _convert_time.get_timing();
     t.bb_process_time += _bencode_time.get_timing();
+    t.wait_if_empty_time += _ring_buffer._rb_block_if_empty_time.get_timing();
+    t.wait_if_full_time += _ring_buffer._rb_block_if_full_time.get_timing();
+    t.wait_if_empty_time_counter += _ring_buffer._rb_block_if_empty_time_counter;
+    t.wait_if_full_time_counter += _ring_buffer._rb_block_if_full_time_counter;
     return t;
 }
 

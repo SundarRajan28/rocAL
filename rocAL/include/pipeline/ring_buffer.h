@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include <queue>
 
 #include "pipeline/commons.h"
+#include "pipeline/timing_debug.h"
 #include "device/device_manager.h"
 #include "device/device_manager_hip.h"
 #include "meta_data/meta_data.h"
@@ -68,6 +69,8 @@ class RingBuffer {
     void block_if_empty();
     void block_if_full();
     void release_if_empty();
+    TimingDbg _rb_block_if_empty_time, _rb_block_if_full_time;
+    long long unsigned _rb_block_if_empty_time_counter, _rb_block_if_full_time_counter;
 
    private:
     std::queue<MetaDataNamePair> _meta_ring_buffer;
