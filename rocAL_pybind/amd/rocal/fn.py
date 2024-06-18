@@ -1155,10 +1155,10 @@ def transpose(*inputs, perm=[], output_layout=types.NHWC, output_dtype=types.UIN
     transposed_image = b.transpose(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (transposed_image)
 
-def normalize(*inputs, axes=[], mean=[], stddev=[], scale=1.0, shift=0.0, output_layout=types.NHWC, output_dtype=types.UINT8):
+def normalize(*inputs, axes=[], mean=[], stddev=[], scale=1.0, shift=0.0, output_layout=types.NHWC, output_datatype=types.UINT8):
     # pybind call arguments
     kwargs_pybind = {"input_image": inputs[0], "axes": axes, "mean": mean, "stddev": stddev, "is_output": False,
-                     "scale": scale, "shift": shift, "output_layout": output_layout, "output_dtype": output_dtype}
+                     "scale": scale, "shift": shift, "output_layout": output_layout, "output_dtype": output_datatype}
     normalized_image = b.normalize(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (normalized_image)
 
