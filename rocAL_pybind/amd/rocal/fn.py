@@ -1146,6 +1146,19 @@ def spectrogram(*inputs, bytes_per_sample_hint = [0], center_windows = True, lay
     spectrogram_output = b.spectrogram(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (spectrogram_output)
 
+def to_decibels(*inputs, bytes_per_sample_hint = [0], cutoff_db = -200.0, multiplier = 10.0, reference = 0.0, seed = -1, output_dtype = types.FLOAT):
+    '''
+    Converts a magnitude (real, positive) to the decibel scale.
+
+    Conversion is done according to the following formula:
+
+    min_ratio = pow(10, cutoff_db / multiplier)
+    out[i] = multiplier * log10( max(min_ratio, input[i] / reference) )
+    '''
+    kwargs_pybind = {"input_audio": inputs[0], "is_output": False, "cutoff_db": cutoff_db, "multiplier": multiplier, "reference_magnitude": reference, "rocal_tensor_output_type": output_dtype}
+    decibel_scale = b.toDecibels(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return decibel_scale
+
 def set_layout(*inputs, output_layout=types.NHWC):
     """!Adjusts brightness of the image.
 
