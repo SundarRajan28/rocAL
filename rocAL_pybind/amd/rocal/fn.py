@@ -1185,6 +1185,19 @@ def tensor_mul_scalar_float(*inputs, scalar=1.0, output_datatype=types.FLOAT):
     tensor_mul_scalar_float = b.tensorMulScalar(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
     return tensor_mul_scalar_float
 
+def nonsilent_region(*inputs, cutoff_db = -60, reference_power = 0.0, reset_interval = 8192, window_length = 2048):
+    """
+    Performs leading and trailing silence detection in an audio buffer.
+    @param cutoff_db (float)                                      The threshold, in dB, below which the signal is considered silent.
+    @param reference_power (float)                                The reference power that is utilized to convert the signal to dB.
+    @param reset_interval (int)                                   The number of samples after which the moving mean average is recalculated aiming to avoid loss of precision.
+    @param window_length (int)                                    Size of the sliding window used in calculating the short-term power of the signal.
+    """
+    kwargs_pybind = {"input_audio": inputs[0], "is_output": False, "cutoff_db": cutoff_db,
+                     "reference_power": reference_power, "reset_interval": reset_interval, "window_length": window_length}
+    non_silent_region_output = b.nonSilentRegionDetection(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return non_silent_region_output
+
 def set_layout(*inputs, output_layout=types.NHWC):
     """!Adjusts brightness of the image.
 

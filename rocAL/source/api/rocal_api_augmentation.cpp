@@ -2548,6 +2548,43 @@ RocalTensor rocalNormalDistribution(RocalContext p_context,
     return output;
 }
 
+std::pair<RocalTensor, RocalTensor> ROCAL_API_CALL
+rocalNonSilentRegionDetection(
+    RocalContext p_context,
+    RocalTensor p_input,
+    bool is_output,
+    float cutoff_db,
+    float reference_power,
+    int reset_interval,
+    int window_length) {
+    Tensor* anchor_output = nullptr;
+    Tensor* shape_output = nullptr;
+    if ((p_context == nullptr) || (p_input == nullptr))
+        ERR("Invalid ROCAL context or invalid input tensor")
+    auto context = static_cast<Context*>(p_context);
+    auto input = static_cast<Tensor*>(p_input);
+    try {
+        std::vector<size_t> dims1 = {context->user_batch_size(), 1};
+        auto info1 = TensorInfo(std::vector<size_t>(std::move(dims1)),
+                                context->master_graph->mem_type(),
+                                RocalTensorDataType::INT32);
+        info1.set_max_shape();
+        std::vector<size_t> dims2 = {context->user_batch_size(), 1};
+        auto info2 = TensorInfo(std::vector<size_t>(std::move(dims2)),
+                                context->master_graph->mem_type(),
+                                RocalTensorDataType::INT32);
+        info2.set_max_shape();
+        anchor_output = context->master_graph->create_tensor(info1, is_output);
+        shape_output = context->master_graph->create_tensor(info2, is_output);
+        context->master_graph->add_node<NonSilentRegionDetectionNode>({input}, {anchor_output, shape_output})->init(cutoff_db, reference_power, window_length, reset_interval);
+    } catch (const std::exception& e) {
+        context->capture_error(e.what());
+        ERR(e.what())
+    }
+
+    return std::make_pair(anchor_output, shape_output);
+}
+
 RocalTensor ROCAL_API_CALL
 rocalSetLayout(
     RocalContext p_context,
