@@ -109,8 +109,8 @@ from rocal_pybind.types import TRIMTOSHAPE
 from rocal_pybind.types import ERROR
 
 #     RocalMelScaleFormula
-from rocal_pybind.types import SLANEY
-from rocal_pybind.types import HTK
+from rocal_pybind.types import MELSCALE_SLANEY
+from rocal_pybind.types import MELSCALE_HTK
 
 #     RocalLastBatchPolicy
 from rocal_pybind.types import LAST_BATCH_FILL
@@ -181,15 +181,15 @@ _known_types = {
     CLAMP: ("CLAMP", CLAMP),
     REFLECT: ("REFLECT", REFLECT),
 
-    NTF: ("NTF", NTF),
-    NFT: ("NFT", NFT),
-
     PAD: ("PAD", PAD),
     TRIMTOSHAPE: ("TRIMTOSHAPE", TRIMTOSHAPE),
     ERROR: ("ERROR", ERROR),
 
-    SLANEY: ("SLANEY", SLANEY),
-    HTK: ("HTK", HTK),
+    NTF: ("NTF", NTF),
+    NFT: ("NFT", NFT),
+
+    MELSCALE_SLANEY: ("MELSCALE_SLANEY", MELSCALE_SLANEY),
+    MELSCALE_HTK: ("MELSCALE_HTK", MELSCALE_HTK),
 
     LAST_BATCH_FILL : ("LAST_BATCH_FILL", LAST_BATCH_FILL),
     LAST_BATCH_DROP : ("LAST_BATCH_DROP", LAST_BATCH_DROP),
