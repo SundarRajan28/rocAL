@@ -32,8 +32,8 @@ THE SOFTWARE.
 #include <variant>
 #include <vector>
 
-#include "log.h"
-#include "parameter.h"
+#include "pipeline/log.h"
+#include "parameters/parameter.h"
 template <typename T>
 class UniformRand : public Parameter<T> {
    public:
@@ -53,10 +53,8 @@ class UniformRand : public Parameter<T> {
     };
 
     std::vector<T> get_array() override {
-        return _array;
+        return _param_values;
     }
-
-
 
     void renew_value() {
         std::unique_lock<std::mutex> lock(_lock);
@@ -70,21 +68,19 @@ class UniformRand : public Parameter<T> {
             _updated_val = static_cast<T>(
                 ((double)val / (double)_generator.max()) * ((double)_end - (double)_start) + (double)_start);
         }
-
     }
 
     void renew_array() {
-        for (uint i = 0; i < _batch_size; i++) {
+        for (uint i = 0; i < _size; i++) {
             renew_value();
-            _array[i] = _updated_val;
+            _param_values[i] = _updated_val;
         }
     }
 
     void renew() override {
-        if (_array.size()>0) {
+        if (_param_values.size()) {
             renew_array();
-        }
-        else {
+        } else {
             renew_value();
         }
     }
@@ -98,10 +94,11 @@ class UniformRand : public Parameter<T> {
         return 0;
     }
 
-    void create_array(unsigned batch_size) override {
-        if (_array.size() == 0)
-            _array.resize(batch_size);
-        _batch_size = batch_size;
+    void create_array(unsigned vector_size) override {
+        if (_param_values.size() == 0) {
+            _param_values.resize(vector_size);
+            _size = vector_size;
+        }
     }
 
     bool single_value() const override {
@@ -112,10 +109,10 @@ class UniformRand : public Parameter<T> {
     T _start;
     T _end;
     T _updated_val;
-    std::vector<T> _array;
+    std::vector<T> _param_values;
     std::mt19937 _generator;
     std::mutex _lock;
-    unsigned _batch_size;
+    unsigned _size;
 };
 
 template <typename T>
@@ -197,17 +194,16 @@ struct CustomRand : public Parameter<T> {
     }
 
     void renew_array() {
-        for (uint i = 0; i < _batch_size; i++) {
+        for (uint i = 0; i < _size; i++) {
             renew_value();
-            _array[i] = _updated_val;
+            _param_values[i] = _updated_val;
         }
     }
 
     void renew() override {
-        if (_array.size() > 0) {
+        if (_param_values.size()) {
             renew_array();
-        }
-        else {
+        } else {
             renew_value();
         }
     }
@@ -216,13 +212,14 @@ struct CustomRand : public Parameter<T> {
     };
 
     std::vector<T> get_array() override {
-        return _array;
+        return _param_values;
     }
 
-    void create_array(unsigned batch_size) override {
-        if (_array.size() == 0)
-            _array.resize(batch_size);
-        _batch_size = batch_size;
+    void create_array(unsigned vector_size) override {
+        if (_param_values.size() == 0) {
+            _param_values.resize(vector_size);
+            _size = vector_size;
+        }
     }
 
     bool single_value() const override {
@@ -235,8 +232,8 @@ struct CustomRand : public Parameter<T> {
     std::vector<double> _comltv_dist;  //!< commulative probabilities
     double _mean;
     T _updated_val;
-    std::vector<T> _array;
+    std::vector<T> _param_values;  //!< The values will be used in parameter_vx.h file after renewing
     std::mt19937 _generator;
     std::mutex _lock;
-    unsigned _batch_size;
+    unsigned _size;
 };

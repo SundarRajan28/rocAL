@@ -21,8 +21,8 @@ THE SOFTWARE.
 */
 
 #include <vx_ext_rpp.h>
-#include "node_gaussian_noise.h"
-#include "exception.h"
+#include "augmentations/effects_augmentations/node_gaussian_noise.h"
+#include "pipeline/exception.h"
 
 GaussianNoiseNode::GaussianNoiseNode(const std::vector<Tensor*>& inputs, const std::vector<Tensor*>& outputs) : Node(inputs, outputs),
                                                                                                       _mean(MEAN_RANGE[0], MEAN_RANGE[1]),

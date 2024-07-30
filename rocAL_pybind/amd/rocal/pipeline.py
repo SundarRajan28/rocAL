@@ -26,7 +26,6 @@
 import rocal_pybind as b
 import amd.rocal.types as types
 import numpy as np
-import cupy as cp
 import ctypes
 import functools
 import inspect
@@ -67,7 +66,7 @@ class Pipeline(object):
     def __init__(self, batch_size=-1, num_threads=0, device_id=-1, seed=1,
                  exec_pipelined=True, prefetch_queue_depth=2,
                  exec_async=True, bytes_per_sample=0,
-                 rocal_cpu=False, max_streams=-1, default_cuda_stream_priority=0, tensor_layout=types.NCHW, reverse_channels=False, mean=None, std=None, tensor_dtype=types.FLOAT, output_memory_type=None):
+                 rocal_cpu=False, max_streams=-1, default_cuda_stream_priority=0, tensor_layout=types.NCHW, reverse_channels=False, mean=None, std=None, tensor_dtype=types.FLOAT, output_memory_type=None): 
         if (rocal_cpu):
             self._handle = b.rocalCreate(
                 batch_size, types.CPU, device_id, num_threads, prefetch_queue_depth, tensor_dtype)
@@ -84,7 +83,7 @@ class Pipeline(object):
         self._check_ops_decoder = [
             "ImageDecoder", "ImageDecoderSlice", "ImageDecoderRandomCrop", "ImageDecoderRaw"]
         self._check_ops_reader = ["labelReader", "TFRecordReaderClassification", "TFRecordReaderDetection",
-                                  "COCOReader", "Caffe2Reader", "Caffe2ReaderDetection", "CaffeReader", "CaffeReaderDetection", "NumpyReader"]
+                                  "COCOReader", "Caffe2Reader", "Caffe2ReaderDetection", "CaffeReader", "CaffeReaderDetection"]
         self._batch_size = batch_size
         self._num_threads = num_threads
         self._device_id = device_id
@@ -120,6 +119,11 @@ class Pipeline(object):
         self._reader = None
         self._define_graph_set = False
         self.set_seed(self._seed)
+        self._is_external_source_operator = False
+        self._external_source = None
+        self._external_source_mode = None
+        self._last_batch_policy = None
+        self._shard_size = None
 
     def build(self):
         """!Build the pipeline using rocalVerify call
@@ -150,19 +154,8 @@ class Pipeline(object):
         b.rocalToTensor(self._handle, ctypes.c_void_p(array.data_ptr()), tensor_format, tensor_dtype,
                         multiplier[0], multiplier[1], multiplier[2], offset[0], offset[1], offset[2], (1 if reverse_channels else 0), self._output_memory_type, max_roi_height, max_roi_width)
 
-    def get_one_hot_encoded_labels(self, array, device):
-        if device == "cpu":
-            if (isinstance(array, np.ndarray)):
-                b.getOneHotEncodedLabels(self._handle, array.ctypes.data_as(
-                    ctypes.c_void_p), self._num_classes, 0)
-            else:  # torch tensor
-                return b.getOneHotEncodedLabels(self._handle, ctypes.c_void_p(array.data_ptr()), self._num_classes, 0)
-        else:
-            if (isinstance(array, cp.ndarray)):
-                b.getCupyOneHotEncodedLabels(
-                    self._handle, array.data.ptr, self._num_classes, 1)
-            else:  # torch tensor
-                return b.getOneHotEncodedLabels(self._handle, ctypes.c_void_p(array.data_ptr()), self._num_classes, 1)
+    def get_one_hot_encoded_labels(self, array_ptr, dest_device_type):
+            b.getOneHotEncodedLabels(self._handle, array_ptr, self._num_classes, dest_device_type)
 
     def set_outputs(self, *output_list):
         b.setOutputs(self._handle, len(output_list), output_list)
@@ -260,6 +253,9 @@ class Pipeline(object):
 
     def get_output_tensors(self):
         return b.getOutputTensors(self._handle)
+    
+    def get_last_batch_padded_size(self):
+        return b.getLastBatchPaddedSize(self._handle)
 
     def run(self):
         """

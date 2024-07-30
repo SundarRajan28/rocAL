@@ -23,11 +23,116 @@
 #
 # @brief File containing iterators for generic use case
 
-import cupy as cp
 import numpy as np
 import rocal_pybind as b
 import amd.rocal.types as types
+import ctypes
+try:
+    import cupy as cp
+    CUPY_FOUND=True
+except ImportError:
+    CUPY_FOUND=False
 
+class ROCALNumpyIterator(object):
+    def __init__(self, pipeline, device="cpu", device_id=0, return_max_roi=False):
+        self.loader = pipeline
+        self.device = device
+        self.device_id = device_id
+        self.output_memory_type = self.loader._output_memory_type
+        self.output_list = None
+        self.batch_size = self.loader._batch_size
+        self.return_max_roi = return_max_roi
+        self.len = b.getRemainingImages(self.loader._handle)
+        self.last_batch_policy = self.loader._last_batch_policy
+        self.last_batch_size = None
+        if self.device is "gpu" or "cuda":
+            if not CUPY_FOUND:
+                print('info: Import CuPy failed. Falling back to CPU!')
+                self.device = "cpu"
+
+    def next(self):
+        return self.__next__()
+
+    def __next__(self):
+        if self.loader.rocal_run() != 0:
+            raise StopIteration
+        self.output_tensor_list = self.loader.get_output_tensors()
+
+        if self.output_list is None:
+            # Output list used to store pipeline outputs - can support multiple augmentation outputs
+            self.output_list = []
+            for i in range(len(self.output_tensor_list)):
+                dimensions = self.output_tensor_list[i].dimensions()
+                if self.return_max_roi:
+                    self.num_dims = len(dimensions) - 1
+                    self.roi_array = np.zeros(self.batch_size * self.num_dims * 2, dtype=np.uint32)
+                    self.output_tensor_list[i].copy_roi(self.roi_array)
+                    self.max_roi_size = np.zeros(self.num_dims, dtype=np.uint32)
+                    for j in range(self.batch_size):  # Calculating the max ROI for a batch
+                        index = j * self.num_dims * 2
+                        roi_size = self.roi_array[index + self.num_dims: index +
+                                                  self.num_dims * 2] - self.roi_array[index: index + self.num_dims]
+                        self.max_roi_size = np.maximum(roi_size, self.max_roi_size)
+                if self.device == "cpu":
+                    self.dtype = self.output_tensor_list[i].dtype()
+                    output = np.empty(
+                        dimensions, dtype=self.dtype)
+                else:
+                    with cp.cuda.Device(device=self.device_id):
+                        self.dtype = self.output_tensor_list[i].dtype()
+                        output = cp.empty(dimensions, self.dtype)
+
+                if self.device == "cpu":
+                    self.output_tensor_list[i].copy_data(output)
+                else:
+                    self.output_tensor_list[i].copy_data(output.data.ptr)
+                self.output_list.append(output)
+        else:
+            for i in range(len(self.output_tensor_list)):
+                if self.return_max_roi:
+                    self.output_tensor_list[i].copy_roi(self.roi_array)
+                    self.max_roi_size = np.zeros(self.num_dims, dtype=np.uint32)
+                    for j in range(self.batch_size):
+                        index = j * self.num_dims * 2
+                        roi_size = self.roi_array[index + self.num_dims: index +
+                                                  self.num_dims * 2] - self.roi_array[index: index + self.num_dims]
+                        self.max_roi_size = np.maximum(roi_size, self.max_roi_size)
+                if self.device == "cpu":
+                    self.output_tensor_list[i].copy_data(self.output_list[i])
+                else:
+                    self.output_tensor_list[i].copy_data(
+                        self.output_list[i].data.ptr)
+        if self.return_max_roi:
+            roi_output_list = []
+            for i in range(len(self.output_list)):
+                roi_output_list.append(
+                    self.output_list[i][:, :self.max_roi_size[0], :self.max_roi_size[1], :self.max_roi_size[2], :self.max_roi_size[3]])
+            # Check if last batch policy is partial and only return the valid images in last batch
+            if (self.last_batch_policy is (types.LAST_BATCH_PARTIAL)) and b.getRemainingImages(self.loader._handle) <= 0:
+                if (self.last_batch_size is None):
+                    self.last_batch_size = self.batch_size - \
+                        b.getLastBatchPaddedSize(self.loader._handle)
+                return [inner_list[0:self.last_batch_size, :] for inner_list in roi_output_list]
+            return roi_output_list
+        # Check if last batch policy is partial and only return the valid images in last batch
+        if (self.last_batch_policy is (types.LAST_BATCH_PARTIAL)) and b.getRemainingImages(self.loader._handle) <= 0:
+            if (self.last_batch_size is None):
+                self.last_batch_size = self.batch_size - \
+                    b.getLastBatchPaddedSize(self.loader._handle)
+            return [inner_list[0:self.last_batch_size, :] for inner_list in self.output_list]
+        return self.output_list
+
+    def reset(self):
+        b.rocalResetLoaders(self.loader._handle)
+
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return self.len
+
+    def __del__(self):
+        b.rocalRelease(self.loader._handle)
 
 class ROCALGenericIterator(object):
     """!Iterator for processing data
@@ -49,6 +154,10 @@ class ROCALGenericIterator(object):
         self.multiplier = multiplier
         self.offset = offset
         self.device = device
+        if self.device is "gpu" or "cuda":
+            if not CUPY_FOUND:
+                print('info: Import CuPy failed. Falling back to CPU!')
+                self.device = "cpu"
         self.device_id = device_id
         self.reverse_channels = reverse_channels
         self.tensor_dtype = tensor_dtype
@@ -62,11 +171,58 @@ class ROCALGenericIterator(object):
         self.labels_tensor = None
         self.iterator_length = b.getRemainingImages(
             self.loader._handle) // self.batch_size  # iteration length
+        if self.loader._is_external_source_operator:
+            self.eos = False
+            self.index = 0
+            self.num_batches = self.loader._external_source.n // self.batch_size if self.loader._external_source.n % self.batch_size == 0 else (
+                self.loader._external_source.n // self.batch_size + 1)
+        else:
+            self.num_batches = None
 
     def next(self):
         return self.__next__()
 
     def __next__(self):
+        if (self.loader._is_external_source_operator):
+            if (self.index + 1) == self.num_batches:
+                self.eos = True
+            if (self.index + 1) <= self.num_batches:
+                data_loader_source = next(self.loader._external_source)
+                # Extract all data from the source
+                images_list = data_loader_source[0] if (self.loader._external_source_mode == types.EXTSOURCE_FNAME) else []
+                input_buffer = data_loader_source[0] if (self.loader._external_source_mode != types.EXTSOURCE_FNAME) else []
+                labels_data = data_loader_source[1] if (len(data_loader_source) > 1) else None
+                roi_height = data_loader_source[2] if (len(data_loader_source) > 2) else []
+                roi_width = data_loader_source[3] if (len(data_loader_source) > 3) else []
+                ROIxywh_list = []
+                for i in range(self.batch_size):
+                    ROIxywh = b.ROIxywh()
+                    ROIxywh.x =  0
+                    ROIxywh.y =  0
+                    ROIxywh.w = roi_width[i] if len(roi_width) > 0 else 0
+                    ROIxywh.h = roi_height[i] if len(roi_height) > 0 else 0
+                    ROIxywh_list.append(ROIxywh)
+                if (len(data_loader_source) == 6 and self.loader._external_source_mode == types.EXTSOURCE_RAW_UNCOMPRESSED):
+                    decoded_height = data_loader_source[4]
+                    decoded_width = data_loader_source[5]
+                else:
+                    decoded_height = self.loader._external_source_user_given_height
+                    decoded_width = self.loader._external_source_user_given_width
+
+                kwargs_pybind = {
+                    "handle": self.loader._handle,
+                    "source_input_images": images_list,
+                    "labels": labels_data,
+                    "input_batch_buffer": input_buffer,
+                    "roi_xywh": ROIxywh_list,
+                    "decoded_width": decoded_width,
+                    "decoded_height": decoded_height,
+                    "channels": 3,
+                    "external_source_mode": self.loader._external_source_mode,
+                    "rocal_tensor_layout": types.NCHW,
+                    "eos": self.eos}
+                b.externalSourceFeedInput(*(kwargs_pybind.values()))
+            self.index = self.index + 1
         if self.loader.rocal_run() != 0:
             raise StopIteration
         self.output_tensor_list = self.loader.get_output_tensors()
@@ -78,14 +234,14 @@ class ROCALGenericIterator(object):
                 if self.device == "cpu":
                     self.dtype = self.output_tensor_list[i].dtype()
                     self.output = np.empty(self.dimensions, dtype=self.dtype)
-                    self.labels = np.empty(self.labels_size, dtype=self.dtype)
+                    self.labels = np.empty(self.labels_size, dtype="int32")
                 else:
                     self.dtype = self.output_tensor_list[i].dtype()
                     with cp.cuda.Device(device=self.device_id):
                         self.output = cp.empty(
                             self.dimensions, dtype=self.dtype)
                         self.labels = cp.empty(
-                            self.labels_size, dtype=self.dtype)
+                            self.labels_size, dtype="int32")
 
                 if self.device == "cpu":
                     self.output_tensor_list[i].copy_data(self.output)
@@ -99,11 +255,22 @@ class ROCALGenericIterator(object):
                 else:
                     self.output_tensor_list[i].copy_data(
                         self.output_list[i].data.ptr)
+        if (self.loader._is_external_source_operator):
+            self.labels = self.loader.get_image_labels()
+            if self.device == "cpu":
+                self.labels_tensor = self.labels.astype(dtype=np.int_)
+            else:
+                with cp.cuda.Device(device=self.device_id):
+                    self.labels_tensor = self.labels.astype(dtype=cp.int_)
+            return self.output_list, self.labels_tensor
 
         if self.loader._name == "labelReader":
             if self.loader._one_hot_encoding == True:
-                self.loader.get_one_hot_encoded_labels(
-                    self.labels, self.device)
+                if self.device == "cpu":
+                    self.loader.get_one_hot_encoded_labels(
+                        self.labels.ctypes.data, self.loader._output_memory_type)
+                else:
+                    self.loader.get_one_hot_encoded_labels(self.labels.data.ptr, self.loader._output_memory_type)
                 self.labels_tensor = self.labels.reshape(
                     -1, self.batch_size, self.loader._num_classes)
             else:

@@ -20,10 +20,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "image_source_evaluator.h"
+#include "loaders/image_source_evaluator.h"
 
-#include "decoder_factory.h"
-#include "reader_factory.h"
+#include "decoders/image/decoder_factory.h"
+#include "readers/image/reader_factory.h"
 void ImageSourceEvaluator::set_size_evaluation_policy(MaxSizeEvaluationPolicy arg) {
     _width_max.set_policy(arg);
     _height_max.set_policy(arg);
@@ -96,21 +96,21 @@ void ImageSourceEvaluator::find_max_numpy_dimensions() {
         _reader->close();
 
         if (_max_numpy_dims.size() == 0) {
-            _max_numpy_dims.resize(numpy_header._shape.size());
-            _numpy_dtype = numpy_header._type_info;
+            _max_numpy_dims.resize(numpy_header.array_shape.size());
+            _numpy_dtype = numpy_header.type_info;
         }
 
-        if (_max_numpy_dims.size() != numpy_header._shape.size()) {
+        if (_max_numpy_dims.size() != numpy_header.array_shape.size()) {
             THROW("All numpy arrays must have the same number of dimensions")
         }
 
-        if (_numpy_dtype != numpy_header._type_info) {
+        if (_numpy_dtype != numpy_header.type_info) {
             THROW("All numpy arrays must have the same data type")
         }
 
         for (uint i = 0; i < _max_numpy_dims.size(); i++) {
-            if (numpy_header._shape[i] > _max_numpy_dims[i]) {
-                _max_numpy_dims[i] = numpy_header._shape[i];
+            if (numpy_header.array_shape[i] > _max_numpy_dims[i]) {
+                _max_numpy_dims[i] = numpy_header.array_shape[i];
             }
         }
     }

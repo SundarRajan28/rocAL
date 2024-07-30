@@ -96,13 +96,56 @@ py::object wrapper_copy_to_tensor(RocalContext context, py::object p,
     return py::cast<py::none>(Py_None);
 }
 
+py::object wrapperRocalExternalSourceFeedInput(
+    RocalContext context, std::vector<std::string> input_images_names,
+    py::array &labels, py::list arrays,
+    std::vector<ROIxywh> roi_xywh,
+    unsigned int max_width, unsigned int max_height, unsigned int channels,
+    RocalExternalSourceMode mode, RocalTensorLayout layout, bool eos) {
+    std::vector<unsigned char *> uchar_arrays;
+    if (input_images_names.size() == 0) {  // Used for mode 1 and mode 2 for passing decoded buffers
+        size_t numArrays = py::len(arrays);
+        for (size_t i = 0; i < numArrays; i++) {
+            py::array_t<unsigned char> arr(arrays[i]);
+            py::buffer_info buf = arr.request();
+            uchar_arrays.push_back(static_cast<unsigned char *>(buf.ptr));
+        }
+    }
+    bool enable_labels = true;
+    if (labels.is_none()) {
+        enable_labels = false;
+    }
+    int status = rocalExternalSourceFeedInput(context, input_images_names, enable_labels, uchar_arrays, roi_xywh, max_width, max_height, channels, mode, layout, eos);
+
+    // Update labels in the tensorList
+    if (enable_labels) {
+        auto labels_tensor_list = rocalGetImageLabels(context);
+        int *labels_ptr = static_cast<int *>(labels.request().ptr);
+        for (size_t i = 0; i < labels.size(); i++) {
+            labels_tensor_list->at(i)->set_mem_handle(labels_ptr);
+            labels_ptr++;
+        }
+    }
+    return py::cast<py::none>(Py_None);
+}
+
+    py::object wrapper_one_hot_label_copy(RocalContext context, size_t array_ptr, unsigned num_of_classes, RocalOutputMemType dest_mem_type) {
+        void* ptr = reinterpret_cast<void*>(array_ptr);
+        // call pure C++ function
+        rocalGetOneHotImageLabels(context, ptr, num_of_classes, dest_mem_type);
+        return py::cast<py::none>(Py_None);
+    }
+
 std::unordered_map<int, std::string> rocalToPybindLayout = {
     {0, "NHWC"},
     {1, "NCHW"},
     {2, "NFHWC"},
     {3, "NFCHW"},
-    {4, "NDHWC"},
-    {5, "NCDHW"},
+    {4, "NHW"},
+    {5, "NFT"},
+    {6, "NTF"},
+    {7, "NDHWC"},
+    {8, "NCDHW"}
 };
 
 std::unordered_map<int, std::string> rocalToPybindOutputDtype = {
@@ -110,19 +153,15 @@ std::unordered_map<int, std::string> rocalToPybindOutputDtype = {
     {1, "float16"},
     {2, "uint8"},
     {3, "int8"},
+    {4, "uint32"},
+    {5, "int32"},
 };
 
 PYBIND11_MODULE(rocal_pybind, m) {
     m.doc() = "Python bindings for the C++ portions of ROCAL";
+    // Bind the C++ structure
     // rocal_api.h
-    m.def("rocalCreate", &rocalCreate, "Creates context with the arguments sent and returns it",
-          py::return_value_policy::reference,
-          py::arg("batch_size"),
-          py::arg("affinity"),
-          py::arg("gpu_id") = 0,
-          py::arg("cpu_thread_count") = 1,
-          py::arg("prefetch_queue_depth") = 3,
-          py::arg("output_data_type") = 0);
+    m.def("rocalCreate", &rocalCreate, "Creates context with the arguments sent and returns it", py::return_value_policy::reference);
     m.def("rocalVerify", &rocalVerify);
     m.def("rocalRun", &rocalRun, py::return_value_policy::reference);
     m.def("rocalRelease", &rocalRelease, py::return_value_policy::reference);
@@ -133,6 +172,29 @@ PYBIND11_MODULE(rocal_pybind, m) {
         .def_readwrite("process_time", &TimingInfo::process_time)
         .def_readwrite("transfer_time", &TimingInfo::transfer_time);
     py::class_<rocalTensor>(m, "rocalTensor")
+        .def(
+            "__add__",
+            [](rocalTensor *output_tensor, rocalTensor *output_tensor1) {
+                py::object fn_module = py::module::import("amd.rocal.fn");
+                auto fn_call = fn_module.attr("tensor_add_tensor_float")(output_tensor, output_tensor1).cast<RocalTensor>();
+                return fn_call;
+            },
+            R"code(
+                Adds a node for arithmetic operation
+                )code",
+            py::return_value_policy::reference)
+        .def(
+            "__mul__",
+            [](rocalTensor *output_tensor, float scalar) {
+                py::object fn_module = py::module::import("amd.rocal.fn");
+                auto fn_call = fn_module.attr("tensor_mul_scalar_float")(output_tensor, "scalar"_a = scalar).cast<RocalTensor>();
+                return fn_call;
+            },
+            R"code(
+                Returns a tensor
+                Adds a node for arithmetic operation
+                )code",
+            py::return_value_policy::reference)
         .def(
             "max_shape",
             [](rocalTensor &output_tensor) {
@@ -209,6 +271,14 @@ PYBIND11_MODULE(rocal_pybind, m) {
             py::return_value_policy::reference,
             R"code(
                 Copies the ring buffer data to cupy arrays.
+                )code")
+        .def(
+            "copy_data", [](rocalTensor &output_tensor, py::object p, uint max_rows, uint max_cols) {
+                auto ptr = ctypes_void_ptr(p);
+                output_tensor.copy_data(static_cast<void *>(ptr), max_rows, max_cols);
+            },
+            R"code(
+                Copies the ring buffer data to python buffer pointers given a ROI with dimensions in x and y direction.
                 )code")
         .def(
             "at", [](rocalTensor &output_tensor, uint idx) {
@@ -347,6 +417,9 @@ PYBIND11_MODULE(rocal_pybind, m) {
         .value("NCHW", ROCAL_NCHW)
         .value("NFHWC", ROCAL_NFHWC)
         .value("NFCHW", ROCAL_NFCHW)
+        .value("NHW", ROCAL_NHW)
+        .value("NFT", ROCAL_NFT)
+        .value("NTF", ROCAL_NTF)
         .value("NDHWC", ROCAL_NDHWC)
         .value("NCDHW", ROCAL_NCDHW)
         .export_values();
@@ -361,10 +434,42 @@ PYBIND11_MODULE(rocal_pybind, m) {
         .value("DECODER_VIDEO_FFMPEG_SW", ROCAL_DECODER_VIDEO_FFMPEG_SW)
         .value("DECODER_VIDEO_FFMPEG_HW", ROCAL_DECODER_VIDEO_FFMPEG_HW)
         .export_values();
-    py::enum_<RocalOutOfBoundsPolicy>(types_m, "RocalOutOfBoundsPolicy", "Rocal Out of Bounds Policy Type")
-        .value("TRIMTOSHAPE", TRIMTOSHAPE)
-        .value("PAD", PAD)
+    py::enum_<RocalExternalSourceMode>(types_m, "RocalExternalSourceMode", "Rocal Extrernal Source Mode")
+        .value("EXTSOURCE_FNAME", ROCAL_EXTSOURCE_FNAME)
+        .value("EXTSOURCE_RAW_COMPRESSED", ROCAL_EXTSOURCE_RAW_COMPRESSED)
+        .value("EXTSOURCE_RAW_UNCOMPRESSED", ROCAL_EXTSOURCE_RAW_UNCOMPRESSED)
         .export_values();
+    py::enum_<RocalAudioBorderType>(types_m,"RocalAudioBorderType", "Rocal Audio Border Type")
+        .value("ZERO", ROCAL_ZERO)
+        .value("CLAMP", ROCAL_CLAMP)
+        .value("REFLECT", ROCAL_REFLECT)
+        .export_values();
+    py::enum_<RocalOutOfBoundsPolicy>(types_m, "RocalOutOfBoundsPolicy", "Rocal Audio Out Of Bounds Policy")
+        .value("PAD", ROCAL_PAD)
+        .value("TRIMTOSHAPE", ROCAL_TRIMTOSHAPE)
+        .value("ERROR", ROCAL_ERROR)
+        .export_values();
+    py::enum_<RocalMelScaleFormula>(types_m, "RocalMelScaleFormula", "Rocal Audio Mel Formula")
+        .value("MELSCALE_SLANEY", ROCAL_MELSCALE_SLANEY)
+        .value("MELSCALE_HTK", ROCAL_MELSCALE_HTK)
+        .export_values();
+    py::enum_<RocalLastBatchPolicy>(types_m, "RocalLastBatchPolicy", "Rocal Last Batch Policy")
+        .value("LAST_BATCH_FILL", ROCAL_LAST_BATCH_FILL)
+        .value("LAST_BATCH_DROP", ROCAL_LAST_BATCH_DROP)
+        .value("LAST_BATCH_PARTIAL", ROCAL_LAST_BATCH_PARTIAL)
+        .export_values();
+    py::class_<ROIxywh>(m, "ROIxywh")
+        .def(py::init<>())
+        .def_readwrite("x", &ROIxywh::x)
+        .def_readwrite("y", &ROIxywh::y)
+        .def_readwrite("w", &ROIxywh::w)
+        .def_readwrite("h", &ROIxywh::h);
+    py::class_<ShardingInfo>(m, "ShardingInfo")
+        .def(py::init<>())
+        .def_readwrite("last_batch_policy", &ShardingInfo::last_batch_policy)
+        .def_readwrite("pad_last_batch_repeated", &ShardingInfo::pad_last_batch_repeated)
+        .def_readwrite("stick_to_shard", &ShardingInfo::stick_to_shard)
+        .def_readwrite("shard_size", &ShardingInfo::shard_size);
     // rocal_api_info.h
     m.def("getRemainingImages", &rocalGetRemainingImages);
     m.def("getImageName", &wrapper_image_name);
@@ -389,10 +494,11 @@ PYBIND11_MODULE(rocal_pybind, m) {
     m.def("getTimingInfo", &rocalGetTimingInfo);
     m.def("labelReader", &rocalCreateLabelReader, py::return_value_policy::reference);
     m.def("cocoReader", &rocalCreateCOCOReader, py::return_value_policy::reference);
+    m.def("getLastBatchPaddedSize", &rocalGetLastBatchPaddedSize, py::return_value_policy::reference);
     // rocal_api_meta_data.h
     m.def("randomBBoxCrop", &rocalRandomBBoxCrop);
     m.def("boxEncoder", &rocalBoxEncoder);
-    // m.def("BoxIOUMatcher", &rocalBoxIOUMatcher);  // Will be enabled when IOU matcher changes are introduced in C++
+    m.def("boxIouMatcher", &rocalBoxIouMatcher);
     m.def("getImgSizes", [](RocalContext context, py::array_t<int> array) {
         auto buf = array.request();
         int *ptr = static_cast<int *>(buf.ptr);
@@ -514,17 +620,18 @@ PYBIND11_MODULE(rocal_pybind, m) {
         }
         return complete_list;
     });
-    // Will be enabled when IOU matcher changes are introduced in C++
-    // m.def("getMatchedIndices", [](RocalContext context) {
-    //     rocalTensorList *matches = rocalGetMatchedIndices(context);
-    //     return py::array(py::buffer_info(
-    //                     (int *)(matches->at(0)->buffer()),
-    //                     sizeof(int),
-    //                     py::format_descriptor<int>::format(),
-    //                     1,
-    //                     {matches->size() * 120087},
-    //                     {sizeof(int) }));
-    // }, py::return_value_policy::reference);
+    m.def(
+        "getMatchedIndices", [](RocalContext context) {
+            rocalTensorList *matches = rocalGetMatchedIndices(context);
+            return py::array(py::buffer_info(
+                static_cast<int *>(matches->at(0)->buffer()),
+                sizeof(int),
+                py::format_descriptor<int>::format(),
+                1,
+                {matches->size() * matches->at(0)->dims().at(0)},
+                {sizeof(int)}));
+        },
+        py::return_value_policy::reference);
     m.def("rocalGetEncodedBoxesAndLables", [](RocalContext context, uint batch_size, uint num_anchors) {
         auto vec_pair_labels_boxes = rocalGetEncodedBoxesAndLables(context, batch_size * num_anchors);
         auto labels_buf_ptr = static_cast<int *>(vec_pair_labels_boxes[0]->at(0)->buffer());
@@ -547,6 +654,7 @@ PYBIND11_MODULE(rocal_pybind, m) {
             {sizeof(float)}));
         return std::make_pair(labels_array, bboxes_array);
     });
+    m.def("getOneHotEncodedLabels", &wrapper_one_hot_label_copy, py::return_value_policy::reference);
     // rocal_api_data_loaders.h
     m.def("cocoImageDecoderSlice", &rocalJpegCOCOFileSourcePartial, "Reads file from the source given and decodes it according to the policy",
           py::return_value_policy::reference);
@@ -590,11 +698,21 @@ PYBIND11_MODULE(rocal_pybind, m) {
           py::return_value_policy::reference);
     m.def("mxnetDecoder", &rocalMXNetRecordSourceSingleShard, "Reads file from the source given and decodes it according to the policy only for mxnet records",
           py::return_value_policy::reference);
-    m.def("numpyReaderSource", &rocalNumpyFileSource, "Reads file from the source given and decodes it according to the policy",
+    m.def("externalFileSource", &rocalJpegExternalFileSource,
           py::return_value_policy::reference);
-    m.def("numpyReaderSourceShard", &rocalNumpyFileSourceSingleShard, "Reads file from the source given and decodes it according to the shard id and number of shards",
+    m.def("externalSourceFeedInput", &wrapperRocalExternalSourceFeedInput,
+          py::return_value_policy::reference);
+    m.def("audioDecoderSingleShard", &rocalAudioFileSourceSingleShard, "Reads file from the source given and decodes it",
+            py::return_value_policy::reference);
+    m.def("audioDecoder", &rocalAudioFileSource, "Reads file from the source given and decodes it",
+            py::return_value_policy::reference);
+    m.def("numpyReaderSource", &rocalNumpyFileSource, "Reads data from numpy files",
+          py::return_value_policy::reference);
+    m.def("numpyReaderSourceShard", &rocalNumpyFileSourceSingleShard, "Reads data from numpy files according to the shard id and number of shards",
           py::return_value_policy::reference);
     m.def("rocalResetLoaders", &rocalResetLoaders);
+    m.def("setLayout", &rocalSetLayout,
+          py::return_value_policy::reference);
     m.def("videoMetaDataReader", &rocalCreateVideoLabelReader, py::return_value_policy::reference);
     // rocal_api_augmentation.h
     m.def("setLayout", &rocalSetLayout,
@@ -671,9 +789,33 @@ PYBIND11_MODULE(rocal_pybind, m) {
           py::return_value_policy::reference);
     m.def("lensCorrection", &rocalLensCorrection,
           py::return_value_policy::reference);
-    m.def("gaussianNoise", &rocalGaussianNoise,
+    m.def("preEmphasisFilter", &rocalPreEmphasisFilter, 
+            py::return_value_policy::reference);
+    m.def("spectrogram", &rocalSpectrogram,
+          py::return_value_policy::reference);
+    m.def("toDecibels", &rocalToDecibels,
+          py::return_value_policy::reference);
+    m.def("resample", &rocalResample,
+          py::return_value_policy::reference);
+    m.def("normalDistribution", &rocalNormalDistribution,
+          py::return_value_policy::reference);
+    m.def("uniformDistribution", &rocalUniformDistribution,
+          py::return_value_policy::reference);
+    m.def("tensorMulScalar", &rocalTensorMulScalar,
+          py::return_value_policy::reference);
+    m.def("tensorAddTensor", &rocalTensorAddTensor,
+          py::return_value_policy::reference);
+    m.def("nonSilentRegionDetection", &rocalNonSilentRegionDetection,
           py::return_value_policy::reference);
     m.def("slice", &rocalSlice,
+          py::return_value_policy::reference);
+    m.def("normalize", &rocalNormalize,
+          py::return_value_policy::reference);
+    m.def("melFilterBank", &rocalMelFilterBank,
+          py::return_value_policy::reference);
+    m.def("gaussianNoise", &rocalGaussianNoise,
+          py::return_value_policy::reference);
+    m.def("sliceFixed", &rocalSliceFixed,
           py::return_value_policy::reference);
 }
 }  // namespace rocal

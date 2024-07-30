@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2019 - 2022 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,12 +24,13 @@ THE SOFTWARE.
 #include <dirent.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
-#include "commons.h"
-#include "image_reader.h"
-#include "timing_debug.h"
+#include "pipeline/commons.h"
+#include "pipeline/timing_debug.h"
+#include "readers/image/image_reader.h"
 
 class NumpyDataReader : public Reader {
    public:
@@ -60,6 +61,9 @@ class NumpyDataReader : public Reader {
     //! Returns the name of the latest file opened
     std::string id() override { return _last_id; };
 
+    //! Returns the name of the latest file_path opened
+    const std::string file_path() override { return _last_file_path; }
+
     unsigned count_items() override;
 
     ~NumpyDataReader() override;
@@ -67,6 +71,9 @@ class NumpyDataReader : public Reader {
     int close() override;
 
     NumpyDataReader();
+
+    //! Returns the number of images in the last batch
+    size_t last_batch_padded_size() override;
 
    private:
     //! opens the folder containnig the images
@@ -82,10 +89,13 @@ class NumpyDataReader : public Reader {
     unsigned _curr_file_idx;
     FILE* _current_fPtr;
     unsigned _current_file_size;
+    unsigned _shard_start_idx;
+    NumpyHeaderData _curr_file_header;
     std::string _last_id;
-    std::string _last_file_name;
+    std::string _last_file_name, _last_file_path, _absolute_file_path;
     size_t _shard_id = 0;
     size_t _shard_count = 1;  // equivalent of batch size
+    signed _shard_size = -1;
     //!< _batch_count Defines the quantum count of the images to be read. It's usually equal to the user's batch size.
     /// The loader will repeat images if necessary to be able to have images available in multiples of the load_batch_count,
     /// for instance if there are 10 images in the dataset and _batch_count is 3, the loader repeats 2 images as if there are 12 images available.
@@ -98,30 +108,45 @@ class NumpyDataReader : public Reader {
     unsigned _seed = 0;
     //!< _file_count_all_shards total_number of files in to figure out the max_batch_size (usually needed for distributed training).
     size_t _file_count_all_shards;
-    std::mutex _cache_mutex_;
-    std::map<std::string, NumpyHeaderData> _header_cache_;
-    const RocalTensorDataType TypeFromNumpyStr(const std::string& format);
-    inline void SkipSpaces(const char*& ptr);
-    void ParseHeaderContents(NumpyHeaderData& target, const std::string& header);
+    std::mutex _cache_mutex;
+    std::map<std::string, NumpyHeaderData> _header_cache;
+    const RocalTensorDataType get_dtype(const std::string& format);
+    inline void skip_spaces(const char*& ptr);
+    void parse_header_data(NumpyHeaderData& target, const std::string& header);
     template <size_t N>
-    void Skip(const char*& ptr, const char (&what)[N]);
+    void skip_char(const char*& ptr, const char (&what)[N]);
     template <size_t N>
-    bool TrySkip(const char*& ptr, const char (&what)[N]);
+    bool try_skip_char(const char*& ptr, const char (&what)[N]);
     template <size_t N>
-    void SkipFieldName(const char*& ptr, const char (&name)[N]);
+    void skip_field(const char*& ptr, const char (&name)[N]);
     template <typename T = int64_t>
-    T ParseInteger(const char*& ptr);
-    std::string ParseStringValue(const char*& input, char delim_start = '\'', char delim_end = '\'');
-    void ParseHeader(NumpyHeaderData& parsed_header, std::string file_path);
+    T parse_int(const char*& ptr);
+    std::string parse_string(const char*& input, char delim_start = '\'', char delim_end = '\'');
+    void parse_header(NumpyHeaderData& parsed_header, std::string file_path);
     template <typename T>
-    size_t ParseNumpyData(T* buf, std::vector<unsigned> strides, std::vector<unsigned> shapes, unsigned dim = 0);
-    bool GetFromCache(const std::string& file_name, NumpyHeaderData& target);
-    void UpdateCache(const std::string& file_name, const NumpyHeaderData& value);   
+    size_t parse_numpy_data(T* buf, std::vector<unsigned> strides, std::vector<unsigned> shapes, unsigned dim = 0);
+    bool get_header_from_cache(const std::string& file_name, NumpyHeaderData& target);
+    void update_header_cache(const std::string& file_name, const NumpyHeaderData& value);
     void incremenet_read_ptr();
+    void increment_curr_file_idx();
     int release();
     size_t get_file_shard_id();
     void incremenet_file_id() { _file_id++; }
     void replicate_last_image_to_fill_last_shard();
     void replicate_last_batch_to_pad_partial_shard();
-    TimingDBG _shuffle_time;
+    std::shared_ptr<MetaDataReader> _meta_data_reader = nullptr;
+    //! Pair containing the last batch policy and pad_last_batch_repeated values for deciding what to do with last batch
+    std::pair<RocalBatchPolicy, bool> _last_batch_info;
+    size_t _last_batch_padded_size = 0;
+    size_t _num_padded_samples = 0;
+    bool _stick_to_shard = false;
+    bool _pad_last_batch_repeated = false;
+    Reader::Status generate_file_names();  // Function that would generate _file_names containing all the samples in the dataset
+    size_t get_start_idx();                // Start Idx of the Shard's Data
+    size_t get_dataset_size();             // DataSet Size
+    size_t shard_size_without_padding();   // Number of files belonging to a shard (without padding)
+    size_t shard_size_with_padding();      // Number of files belonging to a shard (with padding)
+    //!< Used to advance to the next shard's data to increase the entropy of the data seen by the pipeline>
+    void increment_shard_id();
+    std::vector<std::string> _all_shard_file_names_padded;
 };

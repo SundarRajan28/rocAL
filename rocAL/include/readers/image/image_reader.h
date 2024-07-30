@@ -27,9 +27,9 @@ THE SOFTWARE.
 #include <vector>
 
 #include <lmdb.h>
-#include "meta_data_reader.h"
-#include "video_properties.h"
-#include "tensor.h"
+#include "meta_data/meta_data_reader.h"
+#include "readers/video/video_properties.h"
+#include "pipeline/tensor.h"
 
 #define CHECK_LMDB_RETURN_STATUS(status)                                                          \
     do {                                                                                          \
@@ -45,10 +45,18 @@ enum class StorageType {
     CAFFE_LMDB_RECORD = 3,
     CAFFE2_LMDB_RECORD = 4,
     COCO_FILE_SYSTEM = 5,
-    MXNET_RECORDIO = 6,
-    VIDEO_FILE_SYSTEM = 7,
-    SEQUENCE_FILE_SYSTEM = 8,
-    NUMPY_DATA = 9
+    SEQUENCE_FILE_SYSTEM = 6,
+    MXNET_RECORDIO = 7,
+    VIDEO_FILE_SYSTEM = 8,
+    EXTERNAL_FILE_SOURCE = 9,      // to support reading from external source
+    NUMPY_DATA = 10
+};
+
+enum class ExternalSourceFileMode {
+    FILENAME = 0,
+    RAWDATA_COMPRESSED = 1,
+    RAWDATA_UNCOMPRESSED = 2,
+    NONE = 3,
 };
 
 struct ReaderConfig {
@@ -73,6 +81,12 @@ struct ReaderConfig {
     void set_sequence_length(unsigned sequence_length) { _sequence_length = sequence_length; }
     void set_frame_step(unsigned step) { _sequence_frame_step = step; }
     void set_frame_stride(unsigned stride) { _sequence_frame_stride = stride; }
+    void set_external_filemode(ExternalSourceFileMode mode) { _file_mode = mode; }
+    void set_stick_to_shard(bool stick_to_shard) { _stick_to_shard = stick_to_shard; }
+    void set_shard_size(signed shard_size) { _shard_size = shard_size; }
+    void set_last_batch_policy(std::pair<RocalBatchPolicy, bool> last_batch_info) {
+        _last_batch_info = last_batch_info;
+    }
     void set_files(const std::vector<std::string> &files) { _files = files; }
     void set_seed(unsigned seed) { _seed = seed; }
     size_t get_shard_count() { return _shard_count; }
@@ -93,7 +107,13 @@ struct ReaderConfig {
     std::map<std::string, std::string> feature_key_map() { return _feature_key_map; }
     void set_file_prefix(const std::string &prefix) { _file_prefix = prefix; }
     std::string file_prefix() { return _file_prefix; }
+    void set_file_list_path(const std::string &file_list_path) { _file_list_path = file_list_path; }
+    std::string file_list_path() { return _file_list_path; }
     std::shared_ptr<MetaDataReader> meta_data_reader() { return _meta_data_reader; }
+    ExternalSourceFileMode mode() { return _file_mode; }
+    bool get_stick_to_shard() { return _stick_to_shard; }
+    signed get_shard_size() { return _shard_size; }
+    std::pair<RocalBatchPolicy, bool> get_last_batch_policy() { return _last_batch_info; }
 
    private:
     StorageType _type = StorageType::FILE_SYSTEM;
@@ -109,8 +129,13 @@ struct ReaderConfig {
     size_t _sequence_frame_stride = 1;
     bool _shuffle = false;
     bool _loop = false;
-    std::string _file_prefix = "";  //!< to read only files with prefix. supported only for cifar10_data_reader and tf_record_reader
+    std::string _file_prefix;  //!< to read only files with prefix. supported only for cifar10_data_reader and tf_record_reader
+    std::string _file_list_path;  //!< to read only files present in the file list
     std::shared_ptr<MetaDataReader> _meta_data_reader = nullptr;
+    ExternalSourceFileMode _file_mode = ExternalSourceFileMode::NONE;
+    bool _stick_to_shard = true; //!< This bool variables tell if the samples from the same shard will be maintained in next epoch if true (or) will be taken from next epoch in a round robin fashion if false
+    signed _shard_size = -1; //!< The size of the shard for an iterator. Tells when the 
+    std::pair<RocalBatchPolicy, bool> _last_batch_info = {RocalBatchPolicy::FILL, true};
     std::vector<std::string> _files;
     unsigned _seed = 0;
 #ifdef ROCAL_VIDEO
@@ -130,23 +155,23 @@ struct ImageRecordIOHeader {
 };
 
 struct NumpyHeaderData {
-    public:
-    std::vector<unsigned> _shape;
-    RocalTensorDataType _type_info;
-    bool _fortran_order = false;
-    int64_t _data_offset = 0;
+   public:
+    std::vector<unsigned> array_shape;
+    RocalTensorDataType type_info;
+    bool fortran_order = false;
+    int64_t data_offset = 0;
 
-    RocalTensorDataType type() const { return _type_info; };
+    RocalTensorDataType type() const { return type_info; };
 
     size_t size() const {
         size_t num_elements = 1;
-        for (const auto& dim: _shape)
+        for (const auto &dim : array_shape)
             num_elements *= dim;
         return num_elements;
     };
 
-    size_t nbytes() const { return tensor_data_size(_type_info) * size(); }
-    std::vector<unsigned> shape() const { return _shape; }
+    size_t nbytes() const { return tensor_data_size(type_info) * size(); }
+    std::vector<unsigned> shape() const { return array_shape; }
 };
 
 class Reader {
@@ -191,7 +216,17 @@ class Reader {
     //! Returns the name/identifier of the last item opened in this resource
     virtual std::string id() = 0;
     //! Returns the number of items remained in this resource
+
+     //! Returns the path of the last item opened in this resource
+    virtual const std::string file_path() { THROW("File path is not set by the reader") }
+
     virtual unsigned count_items() = 0;
 
     virtual ~Reader() = default;
+
+    virtual std::string get_root_folder_path() { return {}; }
+
+    virtual std::vector<std::string> get_file_paths_from_meta_data_reader() { return {}; }
+    //! Returns the number of images in the last batch
+    virtual size_t last_batch_padded_size() { return 0; }
 };

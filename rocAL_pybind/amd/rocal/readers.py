@@ -57,7 +57,8 @@ def coco(annotations_file='', ltrb=True, masks=False, ratio=False, avoid_class_r
         "ltrb": ltrb,
         "is_box_encoder": is_box_encoder,
         "avoid_class_remapping": avoid_class_remapping,
-        "aspect_ratio_grouping": aspect_ratio_grouping}
+        "aspect_ratio_grouping": aspect_ratio_grouping,
+        "is_box_iou_matcher": is_box_iou_matcher}
     meta_data = b.cocoReader(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (meta_data, labels, bboxes)
@@ -77,7 +78,7 @@ def file(file_root, file_filters=None, file_list='', stick_to_shard=False, pad_l
     Pipeline._current_pipeline._reader = "labelReader"
     # Output
     labels = []
-    kwargs_pybind = {"source_path": file_root}
+    kwargs_pybind = {"source_path": file_root, "file_list": file_list}
     label_reader_meta_data = b.labelReader(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (label_reader_meta_data, labels)
@@ -351,13 +352,18 @@ def mxnet(path, stick_to_shard=False, pad_last_batch=False):
     return mxnet_metadata
 
 
-def numpy(*inputs, file_root='', num_shards=1,
-          random_shuffle=False, shard_id=0, files=[], stick_to_shard=False, pad_last_batch=False, seed=0):
+def numpy(*inputs, file_root='', files=[], num_shards=1,
+          random_shuffle=False, shard_id=0, stick_to_shard=False,
+          last_batch_policy=types.LAST_BATCH_FILL, pad_last_batch_repeated=True, seed=0):
 
     Pipeline._current_pipeline._reader = "NumpyReader"
+    Pipeline._current_pipeline._last_batch_policy = last_batch_policy
+    if pad_last_batch_repeated is False:
+        print("pad_last_batch_repeated = False is not implemented in rocAL. Setting pad_last_batch_repeated to True")
+        pad_last_batch_repeated = True
     # Output
     kwargs_pybind = {"source_path": file_root, "files": files, "is_output": False, "shuffle": random_shuffle,
-                     "loop": False, "decode_size_policy": types.MAX_SIZE, "shard_id": shard_id, "shard_count": num_shards, "seed": seed}
+                     "loop": False, "shard_id": shard_id, "shard_count": num_shards, "seed": seed, "last_batch_info": (last_batch_policy, pad_last_batch_repeated)}
     numpy_reader_output = b.numpyReaderSourceShard(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (numpy_reader_output)

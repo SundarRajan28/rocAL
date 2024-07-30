@@ -33,9 +33,11 @@ class Parameter {
     /// used to internally renew state of the parameter if needed (for random parameters)
     virtual void renew(){};
 
-    virtual void create_array(unsigned batch_size) {};
+    /// allocates memory for the array with specified size
+    virtual void create_array(unsigned size){};
 
-    virtual std::vector<T> get_array() { return{};};
+    /// used to fetch the updated param values
+    virtual std::vector<T> get_array() { return {}; };
 
     virtual ~Parameter() {}
     ///

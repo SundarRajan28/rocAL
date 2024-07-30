@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2019 - 2022 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "numpy_loader_sharded.h"
+#include "loaders/image/numpy_loader_sharded.h"
 
 NumpyLoaderSharded::NumpyLoaderSharded(void* dev_resources) : _dev_resources(dev_resources) {
     _loader_idx = 0;
@@ -38,12 +38,8 @@ std::vector<std::string> NumpyLoaderSharded::get_id() {
     return _loaders[_loader_idx]->get_id();
 }
 
-decoded_image_info NumpyLoaderSharded::get_decode_image_info() {
-    return _loaders[_loader_idx]->get_decode_image_info();
-}
-
-crop_image_info NumpyLoaderSharded::get_crop_image_info() {
-    return _loaders[_loader_idx]->get_crop_image_info();
+DecodedDataInfo NumpyLoaderSharded::get_decode_data_info() {
+    return _loaders[_loader_idx]->get_decode_data_info();
 }
 
 NumpyLoaderSharded::~NumpyLoaderSharded() {
@@ -71,6 +67,7 @@ LoaderModuleStatus NumpyLoaderSharded::load_next() {
 
     return ret;
 }
+
 void NumpyLoaderSharded::initialize(ReaderConfig reader_cfg, DecoderConfig decoder_cfg, RocalMemType mem_type,
                                     unsigned batch_size, bool keep_orig_size) {
     if (_initialized)
@@ -85,7 +82,6 @@ void NumpyLoaderSharded::initialize(ReaderConfig reader_cfg, DecoderConfig decod
     // Initialize loader modules
     for (size_t idx = 0; idx < _shard_count; idx++) {
         _loaders[idx]->set_output(_output_tensor);
-        _loaders[idx]->set_random_bbox_data_reader(_randombboxcrop_meta_data_reader);
         _loaders[idx]->set_gpu_device_id(idx);
         reader_cfg.set_shard_count(_shard_count);
         reader_cfg.set_shard_id(idx);
@@ -93,6 +89,7 @@ void NumpyLoaderSharded::initialize(ReaderConfig reader_cfg, DecoderConfig decod
     }
     _initialized = true;
 }
+
 void NumpyLoaderSharded::start_loading() {
     for (unsigned i = 0; i < _loaders.size(); i++) {
         _loaders[i]->start_loading();
@@ -124,10 +121,6 @@ void NumpyLoaderSharded::set_output(Tensor* output_tensor) {
     _output_tensor = output_tensor;
 }
 
-void NumpyLoaderSharded::set_random_bbox_data_reader(std::shared_ptr<RandomBBoxCrop_MetaDataReader> randombboxcrop_meta_data_reader) {
-    _randombboxcrop_meta_data_reader = randombboxcrop_meta_data_reader;
-}
-
 size_t NumpyLoaderSharded::remaining_count() {
     int sum = 0;
     for (auto& loader : _loaders)
@@ -152,12 +145,23 @@ Timing NumpyLoaderSharded::timing() {
     // is experiences on the load_next() call due to read and decode time is the maximum of all
     for (auto& loader : _loaders) {
         auto info = loader->timing();
-        max_read_time = (info.image_read_time > max_read_time) ? info.image_read_time : max_read_time;
-        max_decode_time = (info.image_decode_time > max_decode_time) ? info.image_decode_time : max_decode_time;
-        swap_handle_time += info.image_process_time;
+        max_read_time = (info.read_time > max_read_time) ? info.read_time : max_read_time;
+        max_decode_time = (info.decode_time > max_decode_time) ? info.decode_time : max_decode_time;
+        swap_handle_time += info.process_time;
     }
-    t.image_decode_time = max_decode_time;
-    t.image_read_time = max_read_time;
-    t.image_process_time = swap_handle_time;
+    t.decode_time = max_decode_time;
+    t.read_time = max_read_time;
+    t.process_time = swap_handle_time;
     return t;
+}
+
+size_t NumpyLoaderSharded::last_batch_padded_size() {
+    size_t last_batch_padded_size = 0;
+    for (auto& loader : _loaders) {
+        if (!last_batch_padded_size)
+            last_batch_padded_size = loader->last_batch_padded_size();
+        if (last_batch_padded_size != loader->last_batch_padded_size())
+            THROW("All loaders must have the same last batch padded size");
+    }
+    return last_batch_padded_size;
 }

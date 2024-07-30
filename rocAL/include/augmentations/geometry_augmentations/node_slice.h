@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,10 +21,10 @@ THE SOFTWARE.
 */
 
 #pragma once
-#include "graph.h"
-#include "node.h"
-#include "parameter_factory.h"
-#include "parameter_vx.h"
+#include "pipeline/graph.h"
+#include "pipeline/node.h"
+#include "parameters/parameter_factory.h"
+#include "parameters/parameter_vx.h"
 #include "rocal_api_types.h"
 
 class SliceNode : public Node {
@@ -32,6 +32,7 @@ class SliceNode : public Node {
     SliceNode(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs);
     SliceNode() = delete;
     ~SliceNode();
+    void init(Tensor *anchor_param, Tensor *shape_param, std::vector<float> &fill_values_param, RocalOutOfBoundsPolicy policy);
     void init(Tensor *anchor_param, std::vector<int> shape_param, std::vector<float> &fill_values_param, RocalOutOfBoundsPolicy policy);
 
    protected:
@@ -40,12 +41,12 @@ class SliceNode : public Node {
     void create_shape_tensor();
 
    private:
+    Tensor *_anchor, *_shape;
     vx_array _fill_values_array;
     void *_shape_array;
-    Tensor *_anchor;
-    vx_tensor _shape = nullptr;
+    vx_tensor _shape_vx_tensor = nullptr;
     std::vector<float> _fill_values, _fill_values_vec;
     std::vector<int> _anchor_vec, _shape_vec;
     std::vector<std::vector<uint32_t>> _slice_roi;
-    RocalOutOfBoundsPolicy _policy = RocalOutOfBoundsPolicy::PAD;
+    RocalOutOfBoundsPolicy _policy = RocalOutOfBoundsPolicy::ROCAL_ERROR;
 };

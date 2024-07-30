@@ -26,7 +26,7 @@ THE SOFTWARE.
 #include <memory>
 #include <string>
 
-#include "meta_data.h"
+#include "meta_data/meta_data.h"
 
 enum class MetaDataReaderType {
     FOLDER_BASED_LABEL_READER = 0,  // Used for imagenet-like dataset
@@ -100,4 +100,5 @@ class MetaDataReader {
     virtual ImgSize lookup_image_size(const std::string& image_name) { return {}; }
     virtual void set_aspect_ratio_grouping(bool aspect_ratio_grouping) { return; }
     virtual bool get_aspect_ratio_grouping() const { return {}; }
+    virtual std::vector<std::string> get_relative_file_path() { return {}; } // Returns the relative file_path's of the reader 
 };
