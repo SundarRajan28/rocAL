@@ -101,6 +101,21 @@ class UniformRand : public Parameter<T> {
             renew_value();
         }
     }
+
+    void renew_array() {
+        for (uint i = 0; i < _size; i++) {
+            renew_value();
+            _param_values[i] = _updated_val;
+        }
+    }
+
+    void renew() override {
+        if (_param_values.size()) {
+            renew_array();
+        } else {
+            renew_value();
+        }
+    }
     int update(T start, T end) {
         std::unique_lock<std::mutex> lock(_lock);
         if (end < start)
