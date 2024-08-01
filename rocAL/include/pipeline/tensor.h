@@ -206,12 +206,9 @@ class TensorInfo {
         if (_layout != layout && _layout != RocalTensorlayout::NONE && (_num_of_dims > 3)) {  // If layout input and current layout's are different modify dims accordingly
             std::vector<size_t> new_dims(_num_of_dims, 0);
             get_modified_dims_from_layout(_layout, layout, new_dims);
-            _dims = new_dims;
-            modify_strides();
+            set_dims(new_dims);
         }
         _layout = layout;
-        if (_layout == RocalTensorlayout::NONE)
-            set_max_shape();
     }
     void set_dims(std::vector<size_t>& new_dims) {
         if (_num_of_dims == new_dims.size()) {

@@ -391,22 +391,10 @@ void MasterGraph::release() {
     if(_is_random_object_bbox)
     {
         if(_random_object_bbox_box1_buf != nullptr) {
-            if (_affinity == RocalAffinity::GPU) {
-    #if ENABLE_HIP
-                hipError_t err = hipHostFree(_random_object_bbox_box1_buf);
-                if (err != hipSuccess)
-                    std::cerr << "\n[ERR] hipFree failed  " << std::to_string(err) << "\n";
-    #endif
-            } else { free(_random_object_bbox_box1_buf); }
+            free(_random_object_bbox_box1_buf);
         }
         if(_random_object_bbox_box2_buf != nullptr) {
-            if (_affinity == RocalAffinity::GPU) {
-    #if ENABLE_HIP
-                hipError_t err = hipHostFree(_random_object_bbox_box2_buf);
-                if (err != hipSuccess)
-                    std::cerr << "\n[ERR] hipFree failed  " << std::to_string(err) << "\n";
-    #endif
-            } else { free(_random_object_bbox_box2_buf); }
+            free(_random_object_bbox_box2_buf);
         }
         // _random_object_bbox_tensor_list.release();
     }
@@ -1097,7 +1085,7 @@ void MasterGraph::output_routine_multiple_loaders() {
             if (!_processing)
                 break;
             auto full_batch_image_names = _loader_modules[0]->get_id(); // Temp change
-            auto decode_image_info = _loader_modules[0]->get_decode_image_info();   // Temp change
+            auto decode_image_info = _loader_modules[0]->get_decode_data_info();   // Temp change
             auto crop_image_info = _loader_modules[0]->get_crop_image_info();   // Temp change
 
             if (full_batch_image_names.size() != _user_batch_size)
@@ -1142,10 +1130,7 @@ void MasterGraph::output_routine_multiple_loaders() {
             if(_is_roi_random_crop) { update_roi_random_crop(); }
             _process_time.start();
             for (auto& graph : _graphs) {
-                graph->schedule();
-            }
-            for (auto& graph : _graphs) {
-                graph->wait();
+                graph->process();
             }
             _process_time.end();
 
@@ -1632,77 +1617,54 @@ TensorList *MasterGraph::mask_meta_data() {
 
     return &_mask_tensor_list;
 }
-class BatchRNG {
- public:
-  /**
-   * @brief Used to keep batch of RNGs, so Operators can be immune to order of sample processing
-   * while using randomness
-   *
-   * @param seed Used to generate seed_seq to initialize batch of RNGs
-   * @param batch_size How many RNGs to store
-   * @param state_size How many seed are used to initialize one RNG. Used to lower probablity of
-   * collisions between seeds used to initialize RNGs in different operators.
-   */
-  BatchRNG(int64_t seed, int batch_size, int state_size = 4)
-  : seed_(seed) {
-    std::seed_seq seq{seed_};
-    std::vector<uint32_t> seeds(batch_size * state_size);
-    seq.generate(seeds.begin(), seeds.end());
-    rngs_.reserve(batch_size);
-    for (int i = 0; i < batch_size * state_size; i += state_size) {
-      std::seed_seq s(seeds.begin() + i, seeds.begin() + i + state_size);
-      rngs_.emplace_back(s);
+
+TensorList *MasterGraph::matched_index_meta_data() {
+    if (_ring_buffer.level() == 0)
+        THROW("No meta data has been loaded")
+    auto meta_data_buffers = reinterpret_cast<unsigned char *>(_ring_buffer.get_meta_read_buffers()[2]);  // Get matches buffer from ring buffer
+    for (unsigned i = 0; i < _matches_tensor_list.size(); i++) {
+        _matches_tensor_list[i]->set_mem_handle(reinterpret_cast<void *>(meta_data_buffers));
+        meta_data_buffers += _matches_tensor_list[i]->info().data_size();
     }
-  }
+    return &_matches_tensor_list;
+}
 
-
-  /**
-   * Returns engine corresponding to given sample ID
-   */
-  std::mt19937 &operator[](int sample) noexcept {
-    return rngs_[sample];
-  }
-
- private:
-  int64_t seed_;
-  std::vector<std::mt19937> rngs_;
-};
-
-TensorList *MasterGraph::random_object_bbox(Tensor *input, std::string output_format, int k_largest, float foreground_prob) {
+TensorList *MasterGraph::random_object_bbox(Tensor *input, std::string output_format, int k_largest, float foreground_prob, bool cache_objects) {
     _random_object_bbox_label_tensor = input;
     _is_random_object_bbox = true;
     _k_largest = k_largest;
     _foreground_prob = foreground_prob;
+    _cache_boxes = cache_objects;
     auto output_dims = _random_object_bbox_label_tensor->num_of_dims() - 1;
     _random_object_bbox_output_format = output_format;
     if(output_format == "start_end" || output_format == "anchor_shape") {        
         // create new instance of tensor class
         std::vector<size_t> box1_dims = {_user_batch_size, output_dims};
-        auto box1_info = TensorInfo(std::move(box1_dims), input->info().mem_type(), RocalTensorDataType::INT32);
+        auto box1_info = TensorInfo(std::move(box1_dims), RocalMemType::HOST, RocalTensorDataType::INT32);
         _random_object_bbox_box1_tensor = new Tensor(box1_info);
 
         // allocate memory for the raw buffer pointer in tensor object
-        allocate_host_or_pinned_mem(&_random_object_bbox_box1_buf, _user_batch_size * output_dims * sizeof(int), input->info().mem_type());
+        allocate_host_or_pinned_mem(&_random_object_bbox_box1_buf, _user_batch_size * output_dims * sizeof(int), RocalMemType::HOST);
         _random_object_bbox_box1_tensor->create_from_ptr(_context, _random_object_bbox_box1_buf);
 
         // create new instance of tensor class
         std::vector<size_t> box2_dims = {_user_batch_size, output_dims};
-        auto box2_info = TensorInfo(std::move(box2_dims), input->info().mem_type(), RocalTensorDataType::INT32);
+        auto box2_info = TensorInfo(std::move(box2_dims), RocalMemType::HOST, RocalTensorDataType::INT32);
         _random_object_bbox_box2_tensor = new Tensor(box2_info);
 
         // allocate memory for the raw buffer pointer in tensor object
-        allocate_host_or_pinned_mem(&_random_object_bbox_box2_buf, _user_batch_size * output_dims * sizeof(int), input->info().mem_type());
+        allocate_host_or_pinned_mem(&_random_object_bbox_box2_buf, _user_batch_size * output_dims * sizeof(int), RocalMemType::HOST);
         _random_object_bbox_box2_tensor->create_from_ptr(_context, _random_object_bbox_box2_buf);
         _random_object_bbox_tensor_list.push_back(_random_object_bbox_box1_tensor);
         _random_object_bbox_tensor_list.push_back(_random_object_bbox_box2_tensor);
     } else if(output_format == "box") {
         // create new instance of tensor class
         std::vector<size_t> box1_dims = {_user_batch_size, output_dims * 2};
-        auto box1_info = TensorInfo(std::move(box1_dims), input->info().mem_type(), RocalTensorDataType::INT32);
+        auto box1_info = TensorInfo(std::move(box1_dims), RocalMemType::HOST, RocalTensorDataType::INT32);
         _random_object_bbox_box1_tensor = new Tensor(box1_info);
 
         // allocate memory for the raw buffer pointer in tensor object
-        allocate_host_or_pinned_mem(&_random_object_bbox_box1_buf, _user_batch_size * output_dims * 2 * sizeof(int), input->info().mem_type());
+        allocate_host_or_pinned_mem(&_random_object_bbox_box1_buf, _user_batch_size * output_dims * 2 * sizeof(int), RocalMemType::HOST);
         _random_object_bbox_box1_tensor->create_from_ptr(_context, _random_object_bbox_box1_buf);
         _random_object_bbox_tensor_list.push_back(_random_object_bbox_box1_tensor);
     }
@@ -1732,9 +1694,27 @@ void MasterGraph::update_random_object_bbox() {
         auto label = input + i * single_image_size;
         int total_box = 0;
         bool fg = foreground(_rng[i]) < _foreground_prob;
-        if (fg) total_box = labelMergeFunc(label, roi_size, max_size, output_compact, _rng[i]);
+        CacheEntry *cache_entry = nullptr;
+        fast_hash_t hash = {};
+        if (_cache_boxes) {
+            fast_hash(hash, label, single_image_size * sizeof(u_int8_t));
+            cache_entry = &_boxes_cache[hash];
+        }
+        int selected_label = -1;
+        std::vector<std::vector<std::vector<unsigned>>> boxes;  // total - lo,hi - 4D
+        if (fg) {
+            if (cache_entry && !cache_entry->labels.empty()) {
+                auto labels_found = cache_entry->labels;
+                if(labels_found.size() == 1) { selected_label = *labels_found.begin(); }
+                else {
+                    std::uniform_int_distribution<int> class_dist{1, *labels_found.rbegin()};
+                    selected_label = class_dist(_rng[i]);
+                }
+            }
+            total_box = labelMergeFunc(label, selected_label, roi_size, max_size, output_compact, _rng[i], cache_entry);
+        }
         if (total_box) {
-            std::vector<std::vector<std::vector<unsigned>>> boxes;  // total - lo,hi - 4d
+            if (!cache_entry || !cache_entry->Get(boxes, selected_label)) {
             std::vector<std::pair<unsigned, unsigned>> ranges;      // totalbox - lo,hi
             std::vector<unsigned> hits;
             boxes.resize(total_box);
@@ -1749,6 +1729,9 @@ void MasterGraph::update_random_object_bbox() {
                         out_row += roi_size[3];
                     }
                 }
+                }
+                if (cache_entry)
+                    cache_entry->Put(selected_label, boxes);
             }
             int chosen_box_idx = pick_box(boxes, _rng[i], _k_largest);
             if(chosen_box_idx == -1) { ERR("No ROI regions found in input. Setting input shape as ROI region"); }
@@ -1973,7 +1956,7 @@ void MasterGraph::mergeRow(int *label_base, const int *in1, const int *in2, int 
     }
 }
 
-int MasterGraph::labelMergeFunc(const u_int8_t *input, std::vector<int> &size, std::vector<size_t> &max_size, std::vector<int> &output_compact, std::mt19937 &rng) {
+int MasterGraph::labelMergeFunc(const u_int8_t *input, int &selected_label, std::vector<int> &size, std::vector<size_t> &max_size, std::vector<int> &output_compact, std::mt19937 &rng, CacheEntry *cache_entry) {
     int64_t total_buf_size = 1;
     for (auto val : size)
         total_buf_size *= val;
@@ -1982,15 +1965,23 @@ int MasterGraph::labelMergeFunc(const u_int8_t *input, std::vector<int> &size, s
     output_compact.resize(total_buf_size);
     std::fill(output_filtered.begin(), output_filtered.end(), 0);
     std::fill(output_compact.begin(), output_compact.end(), 0);
+    if(selected_label == -1) {
     std::set<int> labels_found;
     findLabels(input, labels_found, size, max_size);
     labels_found.erase(0); // Removing background class
-    int selected_label;
     if (!labels_found.size()) return 0;   // All labels belongs to background
+        if (cache_entry && cache_entry->labels.empty())
+            cache_entry->labels = labels_found;
     if(labels_found.size() == 1) { selected_label = *labels_found.begin(); }
     else {
         std::uniform_int_distribution<int> class_dist{1, *labels_found.rbegin()};
         selected_label = class_dist(rng);
+        }
+    }
+    if (cache_entry) {
+        if(cache_entry->total_boxes.count(selected_label)) {
+            return cache_entry->total_boxes[selected_label];
+        }
     }
     filterByLabel(input, output_filtered, size, max_size, selected_label);
     for (int i = 0; i < size[0]; i++) {
@@ -2058,6 +2049,8 @@ int MasterGraph::labelMergeFunc(const u_int8_t *input, std::vector<int> &size, s
         }
         label = remapped;
     }
+    if (cache_entry)
+        cache_entry->total_boxes[selected_label] = label_set.size();
     return label_set.size();
 }
 
@@ -2174,8 +2167,8 @@ void MasterGraph::update_roi_random_crop() {
     uint seed = std::time(0);
     auto input_dims = _roi_random_crop_tensor->info().dims()[1];
     // get the roi_begin and roi_end values from random_object_bbox
-    int *roi_begin_batch = static_cast<int *>(_roi_start_tensor->buffer());
-    int *roi_end_batch = static_cast<int *>(_roi_end_tensor->buffer());
+    int *roi_begin_batch = static_cast<int *>(_random_object_bbox_box1_buf);
+    int *roi_end_batch = static_cast<int *>(_random_object_bbox_box2_buf);
     BatchRNG _rng = {seed, static_cast<int>(_user_batch_size)};
     for(uint i = 0; i < _user_batch_size; i++) {
         int sample_idx = i * input_dims;
@@ -2215,17 +2208,6 @@ void MasterGraph::update_roi_random_crop() {
             }
         }
     }
-}
-
-TensorList *MasterGraph::matched_index_meta_data() {
-    if (_ring_buffer.level() == 0)
-        THROW("No meta data has been loaded")
-    auto meta_data_buffers = reinterpret_cast<unsigned char *>(_ring_buffer.get_meta_read_buffers()[2]);  // Get matches buffer from ring buffer
-    for (unsigned i = 0; i < _matches_tensor_list.size(); i++) {
-        _matches_tensor_list[i]->set_mem_handle(reinterpret_cast<void *>(meta_data_buffers));
-        meta_data_buffers += _matches_tensor_list[i]->info().data_size();
-    }
-    return &_matches_tensor_list;
 }
 
 void MasterGraph::notify_user_thread() {

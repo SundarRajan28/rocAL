@@ -528,11 +528,11 @@ RocalTensor
 
 RocalTensorList
     ROCAL_API_CALL
-    rocalRandomObjectBbox(RocalContext p_context, RocalTensor p_input, std::string output_format, int k_largest, float foreground_prob) {
+    rocalRandomObjectBbox(RocalContext p_context, RocalTensor p_input, std::string output_format, int k_largest, float foreground_prob, bool cache_objects) {
      if ((p_context == nullptr) || (p_input == nullptr)) {
         ERR("Invalid ROCAL context or invalid input tensor")
     }
     auto context = static_cast<Context*>(p_context);
     auto input = static_cast<Tensor*>(p_input);
-    return context->master_graph->random_object_bbox(input, output_format, k_largest, foreground_prob);
+    return context->master_graph->random_object_bbox(input, output_format, k_largest, foreground_prob, cache_objects);
 }

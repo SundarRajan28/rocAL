@@ -66,7 +66,7 @@ def main():
         numpy_reader_output1 = fn.readers.numpy(file_root=data_path, files=y_train, shard_id=local_rank, num_shards=world_size, random_shuffle=True, seed=random_seed+local_rank)
         data_output = fn.set_layout(numpy_reader_output, output_layout=types.NCDHW)
         label_output = fn.set_layout(numpy_reader_output1, output_layout=types.NCDHW)
-        [roi_start, roi_end] = fn.random_object_bbox(label_output, format="start_end", k_largest=2, foreground_prob=0.4)
+        [roi_start, roi_end] = fn.random_object_bbox(label_output, format="start_end", k_largest=2, foreground_prob=0.4, cache_objects=True)
         anchor = fn.roi_random_crop(label_output, roi_start=roi_start, roi_end=roi_end, crop_shape=(1, 128, 128, 128))
         data_sliced_output = fn.slice(data_output, anchor=anchor, shape=(1,128,128,128), output_layout=types.NCDHW, output_dtype=types.FLOAT)
         label_sliced_output = fn.slice(label_output, anchor=anchor, shape=(1,128,128,128), output_layout=types.NCDHW, output_dtype=types.UINT8)       
@@ -75,11 +75,11 @@ def main():
         dflip = fn.random.coin_flip(probability=0.33)
         data_flip_output = fn.flip(data_sliced_output, horizontal=hflip, vertical=vflip, depth=dflip, output_layout=types.NCDHW, output_dtype=types.FLOAT)
         label_flip_output = fn.flip(label_sliced_output, horizontal=hflip, vertical=vflip, depth=dflip, output_layout=types.NCDHW, output_dtype=types.UINT8)
-        brightness = fn.random.uniform(range=[0.7, 1.3])
+        brightness = fn.random.uniform_rand(range=[0.7, 1.3])
         add_brightness = fn.random.coin_flip(probability=0.1)
         brightness_output = fn.brightness(data_flip_output, brightness=brightness, brightness_shift=0.0, conditional_execution=add_brightness, output_layout=types.NCDHW, output_dtype=types.FLOAT)
         add_noise = fn.random.coin_flip(probability=0.5)
-        std_dev = fn.random.uniform(range=[0.0, 0.1])
+        std_dev = fn.random.uniform_rand(range=[0.0, 0.1])
         noise_output = fn.gaussian_noise(brightness_output, mean=0.0, std_dev=std_dev, conditional_execution=add_noise, output_layout=types.NCDHW, output_dtype=types.FLOAT)
         pipeline.set_outputs(noise_output, label_flip_output)
 
@@ -98,10 +98,10 @@ def main():
     
     numpyIteratorPipeline = ROCALNumpyIterator(pipeline, device='cpu' if rocal_cpu else 'gpu')
     print(len(numpyIteratorPipeline))
-    valNumpyIteratorPipeline = ROCALNumpyIterator(pipeline1, device='cpu' if rocal_cpu else 'gpu', return_roi=True)
+    valNumpyIteratorPipeline = ROCALNumpyIterator(pipeline1, device='cpu' if rocal_cpu else 'gpu', return_max_roi=True)
     print(len(valNumpyIteratorPipeline))
     cnt = 0
-    for epoch in range(100):
+    for epoch in range(2):
         print("+++++++++++++++++++++++++++++EPOCH+++++++++++++++++++++++++++++++++++++",epoch)
         for i , it in enumerate(numpyIteratorPipeline):
             print(i, it[0].shape, it[1].shape)

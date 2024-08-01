@@ -20,9 +20,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "node_numpy_loader.h"
+#include "loaders/image/node_numpy_loader.h"
 
-#include "exception.h"
+#include "pipeline/exception.h"
 
 NumpyLoaderNode::NumpyLoaderNode(Tensor *output, void *device_resources) : Node({}, {output}) {
     _loader_module = std::make_shared<NumpyLoaderSharded>(device_resources);

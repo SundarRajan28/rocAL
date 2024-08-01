@@ -30,15 +30,14 @@ import ctypes
 
 
 class ROCALNumpyIterator(object):
-    def __init__(self, pipeline, tensor_dtype=types.FLOAT, device="cpu", device_id=0, return_roi=False):
+    def __init__(self, pipeline, device="cpu", device_id=0, return_max_roi=False):
         self.loader = pipeline
-        self.tensor_dtype = tensor_dtype
         self.device = device
         self.device_id = device_id
         self.output_memory_type = self.loader._output_memory_type
         self.output_list = None
         self.batch_size = self.loader._batch_size
-        self.return_roi = return_roi
+        self.return_max_roi = return_max_roi
         print("self.device", self.device)
         self.len = b.getRemainingImages(self.loader._handle)
 
@@ -55,7 +54,7 @@ class ROCALNumpyIterator(object):
             self.output_list = []
             for i in range(len(self.output_tensor_list)):
                 dimensions = self.output_tensor_list[i].dimensions()
-                if self.return_roi:
+                if self.return_max_roi:
                     self.num_dims = len(dimensions) - 1
                     self.roi_array = np.zeros(self.batch_size * self.num_dims * 2, dtype=np.uint32)
                     self.output_tensor_list[i].copy_roi(self.roi_array)
@@ -79,7 +78,7 @@ class ROCALNumpyIterator(object):
                 self.output_list.append(output)
         else:
             for i in range(len(self.output_tensor_list)):
-                if self.return_roi:
+                if self.return_max_roi:
                     self.output_tensor_list[i].copy_roi(self.roi_array)
                     self.max_roi_size = np.zeros(self.num_dims, dtype=np.uint32)
                     for j in range(self.batch_size):
@@ -88,7 +87,7 @@ class ROCALNumpyIterator(object):
                         self.max_roi_size = np.maximum(roi_size, self.max_roi_size)
                 self.output_tensor_list[i].copy_data(ctypes.c_void_p(
                     self.output_list[i].data_ptr()), self.output_memory_type)
-        if self.return_roi:
+        if self.return_max_roi:
             roi_output_list = []
             for i in range(len(self.output_list)):
                 roi_output_list.append(self.output_list[i][:, :self.max_roi_size[0], :self.max_roi_size[1], :self.max_roi_size[2], :self.max_roi_size[3]])

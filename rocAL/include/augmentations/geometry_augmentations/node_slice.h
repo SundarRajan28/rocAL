@@ -21,10 +21,10 @@ THE SOFTWARE.
 */
 
 #pragma once
-#include "graph.h"
-#include "node.h"
-#include "parameter_factory.h"
-#include "parameter_vx.h"
+#include "pipeline/graph.h"
+#include "pipeline/node.h"
+#include "parameters/parameter_factory.h"
+#include "parameters/parameter_vx.h"
 #include "rocal_api_types.h"
 
 class SliceNode : public Node {
@@ -47,5 +47,5 @@ class SliceNode : public Node {
     std::vector<float> _fill_values, _fill_values_vec;
     std::vector<int> _anchor_vec, _shape_vec;
     std::vector<std::vector<uint32_t>> _slice_roi;
-    RocalOutOfBoundsPolicy _policy = RocalOutOfBoundsPolicy::PAD;
+    RocalOutOfBoundsPolicy _policy = RocalOutOfBoundsPolicy::ROCAL_PAD;
 };

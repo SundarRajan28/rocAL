@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "numpy_loader.h"
+#include "loaders/image/numpy_loader.h"
 
 #include <chrono>
 #include <thread>
@@ -105,11 +105,6 @@ void NumpyLoader::set_output(Tensor *output_tensor) {
     _output_mem_size = ((_output_tensor->info().data_size() / 8) * 8 + 8);
 }
 
-void NumpyLoader::set_random_bbox_data_reader(std::shared_ptr<RandomBBoxCrop_MetaDataReader> randombboxcrop_meta_data_reader) {
-    _randombboxcrop_meta_data_reader = randombboxcrop_meta_data_reader;
-    _circ_buff.random_bbox_crop_flag = true;
-}
-
 void NumpyLoader::stop_internal_thread() {
     _internal_thread_running = false;
     _stopped = true;
@@ -138,8 +133,7 @@ void NumpyLoader::initialize(ReaderConfig reader_cfg, DecoderConfig decoder_cfg,
         de_init();
         throw;
     }
-    _decoded_img_info._image_names.resize(_batch_size);
-    _crop_image_info._crop_image_coords.resize(_batch_size);
+    _decoded_data_info._data_names.resize(_batch_size);
     _tensor_roi.resize(_batch_size);
     _circ_buff.init(_mem_type, _output_mem_size, _prefetch_queue_depth);
     _is_initialized = true;
@@ -182,13 +176,13 @@ NumpyLoader::load_routine() {
                 auto fsize = _reader->read_numpy_data(read_ptr, readSize, max_shape);
                 if (fsize == 0)
                     THROW("Numpy arrays must contain readable data")
-                _decoded_img_info._image_names[file_counter] = _reader->id();
+                _decoded_data_info._data_names[file_counter] = _reader->id();
                 _tensor_roi[file_counter] = _reader->get_numpy_header_data().shape();
                 _reader->close();
                 file_counter++;
             }
             _file_load_time.end();  // Debug timing
-            _circ_buff.set_image_info(_decoded_img_info);
+            _circ_buff.set_decoded_data_info(_decoded_data_info);
             _circ_buff.push();
             _image_counter += _output_tensor->info().batch_size();
             load_status = LoaderModuleStatus::OK;
@@ -220,6 +214,11 @@ NumpyLoader::load_routine() {
 bool NumpyLoader::is_out_of_data() {
     return (remaining_count() < _batch_size);
 }
+
+size_t NumpyLoader::last_batch_padded_size() {
+    return _reader->last_batch_padded_size();
+}
+
 LoaderModuleStatus
 NumpyLoader::update_output_image() {
     LoaderModuleStatus status = LoaderModuleStatus::OK;
@@ -246,14 +245,9 @@ NumpyLoader::update_output_image() {
     if (_stopped)
         return LoaderModuleStatus::OK;
 
-    _output_decoded_img_info = _circ_buff.get_image_info();
-    if (_randombboxcrop_meta_data_reader) {
-        _output_cropped_img_info = _circ_buff.get_cropped_image_info();
-    }
-    _output_names = _output_decoded_img_info._image_names;
+    _output_decoded_data_info = _circ_buff.get_decoded_data_info();
+    _output_names = _output_decoded_data_info._data_names;
     _output_tensor->update_tensor_roi(_tensor_roi);
-    // _output_tensor->update_tensor_roi(_output_decoded_img_info._roi_width, _output_decoded_img_info._roi_height);
-    // _output_tensor->update_tensor_orig_roi(_output_decoded_img_info._original_width, _output_decoded_img_info._original_height);
     _circ_buff.pop();
     if (!_loop)
         _remaining_image_count -= _batch_size;
@@ -263,8 +257,8 @@ NumpyLoader::update_output_image() {
 
 Timing NumpyLoader::timing() {
     Timing t;
-    t.image_read_time = _file_load_time.get_timing();
-    t.image_process_time = _swap_handle_time.get_timing();
+    t.read_time = _file_load_time.get_timing();
+    t.process_time = _swap_handle_time.get_timing();
     return t;
 }
 
@@ -297,10 +291,6 @@ std::vector<std::string> NumpyLoader::get_id() {
     return _output_names;
 }
 
-decoded_image_info NumpyLoader::get_decode_image_info() {
-    return _output_decoded_img_info;
-}
-
-crop_image_info NumpyLoader::get_crop_image_info() {
-    return _output_cropped_img_info;
+DecodedDataInfo NumpyLoader::get_decode_data_info() {
+    return _output_decoded_data_info;
 }

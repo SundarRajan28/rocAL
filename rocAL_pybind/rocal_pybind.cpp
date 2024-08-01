@@ -143,9 +143,9 @@ std::unordered_map<int, std::string> rocalToPybindLayout = {
     {3, "NFCHW"},
     {4, "NHW"},
     {5, "NFT"},
-    {6, "NTF"}
+    {6, "NTF"},
     {7, "NDHWC"},
-    {8, "NCDHW"},
+    {8, "NCDHW"}
 };
 
 std::unordered_map<int, std::string> rocalToPybindOutputDtype = {
@@ -456,10 +456,6 @@ PYBIND11_MODULE(rocal_pybind, m) {
         .def_readwrite("y", &ROIxywh::y)
         .def_readwrite("w", &ROIxywh::w)
         .def_readwrite("h", &ROIxywh::h);
-    py::enum_<RocalOutOfBoundsPolicy>(types_m, "RocalOutOfBoundsPolicy", "Rocal Out of Bounds Policy Type")
-        .value("TRIMTOSHAPE", TRIMTOSHAPE)
-        .value("PAD", PAD)
-        .export_values();
     // rocal_api_info.h
     m.def("getRemainingImages", &rocalGetRemainingImages);
     m.def("getImageName", &wrapper_image_name);

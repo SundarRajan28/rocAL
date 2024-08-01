@@ -24,12 +24,13 @@ THE SOFTWARE.
 #include <dirent.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
-#include "commons.h"
-#include "image_reader.h"
-#include "timing_debug.h"
+#include "pipeline/commons.h"
+#include "pipeline/timing_debug.h"
+#include "readers/image/image_reader.h"
 
 class NumpyDataReader : public Reader {
    public:
@@ -78,10 +79,10 @@ class NumpyDataReader : public Reader {
     struct dirent* _entity;
     std::vector<std::string> _file_names;
     std::vector<std::string> _files;
-    std::vector<NumpyHeaderData> _file_headers;
     unsigned _curr_file_idx;
     FILE* _current_fPtr;
     unsigned _current_file_size;
+    NumpyHeaderData _curr_file_header;
     std::string _last_id;
     std::string _last_file_name;
     size_t _shard_id = 0;
@@ -123,5 +124,4 @@ class NumpyDataReader : public Reader {
     void incremenet_file_id() { _file_id++; }
     void replicate_last_image_to_fill_last_shard();
     void replicate_last_batch_to_pad_partial_shard();
-    TimingDBG _shuffle_time;
 };

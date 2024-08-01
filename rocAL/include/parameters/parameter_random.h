@@ -68,38 +68,6 @@ class UniformRand : public Parameter<T> {
             _updated_val = static_cast<T>(
                 ((double)val / (double)_generator.max()) * ((double)_end - (double)_start) + (double)_start);
         }
-
-    }
-
-    void renew_array() {
-        for (uint i = 0; i < _batch_size; i++) {
-            renew_value();
-            _array[i] = _updated_val;
-        }
-    }
-
-    void renew() override {
-        if (_array.size()>0) {
-            renew_array();
-        }
-        else {
-            renew_value();
-        }
-    }
-
-    void renew_array() {
-        for (uint i = 0; i < _size; i++) {
-            renew_value();
-            _param_values[i] = _updated_val;
-        }
-    }
-
-    void renew() override {
-        if (_param_values.size()) {
-            renew_array();
-        } else {
-            renew_value();
-        }
     }
 
     void renew_array() {

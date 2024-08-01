@@ -21,9 +21,9 @@ THE SOFTWARE.
 */
 
 #pragma once
-#include "graph.h"
-#include "node.h"
 #include "numpy_loader_sharded.h"
+#include "pipeline/graph.h"
+#include "pipeline/node.h"
 
 class NumpyLoaderNode : public Node {
    public:

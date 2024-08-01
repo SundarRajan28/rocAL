@@ -333,6 +333,6 @@ extern "C" RocalTensor ROCAL_API_CALL rocalROIRandomCrop(RocalContext p_context,
  * \param [in] p_input
  * \param [out] anchor The generated anchor tensor
  */
-extern "C" RocalTensorList ROCAL_API_CALL rocalRandomObjectBbox(RocalContext p_context, RocalTensor p_input, std::string output_format="anchor_shape", int k_largest = -1, float foreground_prob = 1.0);
+extern "C" RocalTensorList ROCAL_API_CALL rocalRandomObjectBbox(RocalContext p_context, RocalTensor p_input, std::string output_format="anchor_shape", int k_largest = -1, float foreground_prob = 1.0, bool cache_objects = false);
 
 #endif  // MIVISIONX_ROCAL_API_META_DATA_H
