@@ -695,6 +695,8 @@ PYBIND11_MODULE(rocal_pybind, m) {
           py::return_value_policy::reference);
     m.def("resizeMirrorNormalize", &rocalResizeMirrorNormalize,
           py::return_value_policy::reference);
+    m.def("resizeCropFixed", &rocalResizeCropFixed,
+          py::return_value_policy::reference);
     m.def("resizeCropMirrorFixed", &rocalResizeCropMirrorFixed,
           py::return_value_policy::reference);
     m.def("cropResize", &rocalCropResize,

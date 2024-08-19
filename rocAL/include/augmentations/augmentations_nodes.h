@@ -49,6 +49,7 @@ THE SOFTWARE.
 #include "augmentations/geometry_augmentations/node_crop_mirror_normalize.h"
 #include "augmentations/geometry_augmentations/node_resize_mirror_normalize.h"
 #include "augmentations/geometry_augmentations/node_resize_crop_mirror.h"
+#include "augmentations/geometry_augmentations/node_resize.h"
 #include "augmentations/node_ssd_random_crop.h"
 #include "augmentations/geometry_augmentations/node_crop.h"
 #include "augmentations/geometry_augmentations/node_random_crop.h"

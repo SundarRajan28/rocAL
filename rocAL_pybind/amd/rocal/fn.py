@@ -454,7 +454,7 @@ def resize_crop_mirror(*inputs, resize_width=0, resize_height=0, crop_w=0, crop_
     return (rcm)
 
 
-def resize_crop(*inputs, resize_width=0, resize_height=0, crop_area_factor=None, crop_aspect_ratio=None, x_drift=None, y_drift=None,
+def resize_crop(*inputs, resize_width=0, resize_height=0, crop_w=None, crop_h=None, crop_pos_x=None, crop_pos_y=None,
                 device=None, max_size=[], resize_longer=0, resize_shorter=0, scaling_mode=types.SCALING_MODE_DEFAULT,
                 interpolation_type=types.LINEAR_INTERPOLATION, output_layout=types.NHWC, output_dtype=types.UINT8):
     """!Fused function which performs resize, crop on images.
@@ -462,11 +462,11 @@ def resize_crop(*inputs, resize_width=0, resize_height=0, crop_area_factor=None,
         @param inputs: the input image passed to the augmentation
         @param resize_width (int, optional, default = 0)                                   The length of the X dimension of the resized image
         @param resize_height (int, optional, default = 0)                                  The length of the Y dimension of the resized image
-        @param crop_area_factor (float, optional, default = None)                          area factor used for crop generation
-        @param crop_aspect_ratio (float, optional, default = None)                         aspect ratio used for crop generation
+        @param crop_w (float, optional, default = None)                                    crop width
+        @param crop_h (float, optional, default = None)                                    crop height
         @param device (string, optional, default = None)                                   Parameter unused for augmentation
-        @param x_drift (float, optional, default = None)                                   x_drift used for crop generation
-        @param y_drift (float, optional, default = None)                                   y_drift used for crop generation
+        @param crop_pos_x (float, optional, default = None)                                crop_pos_x used for crop generation
+        @param crop_pos_y (float, optional, default = None)                                crop_pos_y used for crop generation
         @param max_size (int or list of int, optional, default = [])                       Maximum size of the longer dimension when resizing with resize_shorter. When set with resize_shorter, the shortest dimension will be resized to resize_shorter if the longest dimension is smaller or equal to max_size. If not, the shortest dimension is resized to satisfy the constraint longest_dim == max_size. Can be also an array of size 2, where the two elements are maximum size per dimension (H, W). Example: Original image = 400x1200. Resized with: resize_shorter = 200 (max_size not set) => 200x600 resize_shorter = 200, max_size =  400 => 132x400 resize_shorter = 200, max_size = 1000 => 200x600
         @param resize_longer (int, optional, default = 0)                                  The length of the longer dimension of the resized image. This option is mutually exclusive with resize_shorter,`resize_x` and resize_y. The op will keep the aspect ratio of the original image.
         @param resize_shorter (int, optional, default = 0)                                 The length of the shorter dimension of the resized image. This option is mutually exclusive with resize_longer, resize_x and resize_y. The op will keep the aspect ratio of the original image. The longer dimension can be bounded by setting the max_size argument. See max_size argument doc for more info.
@@ -477,19 +477,10 @@ def resize_crop(*inputs, resize_width=0, resize_height=0, crop_area_factor=None,
 
         @return    Resized and cropped Image
     """
-    crop_area_factor = b.createFloatParameter(crop_area_factor) if isinstance(
-        crop_area_factor, float) else crop_area_factor
-    crop_aspect_ratio = b.createFloatParameter(crop_aspect_ratio) if isinstance(
-        crop_aspect_ratio, float) else crop_aspect_ratio
-    x_drift = b.createFloatParameter(
-        x_drift) if isinstance(x_drift, float) else x_drift
-    y_drift = b.createFloatParameter(
-        y_drift) if isinstance(y_drift, float) else y_drift
-
-    # pybind call arguments
-    kwargs_pybind = {"input_image": inputs[0], "dest_width:": resize_width, "dest_height": resize_height, "is_output": False, "crop_area_factor": crop_area_factor,
-                     "crop_aspect_ratio": crop_aspect_ratio, "x_drift": x_drift, "y_drift": y_drift, "output_layout": output_layout, "output_dtype": output_dtype}
-    crop_resized_image = b.cropResize(
+        # pybind call arguments
+    kwargs_pybind = {"input_image": inputs[0], "dest_width:": resize_width, "dest_height": resize_height, "is_output": False, "crop_h": crop_h,
+                     "crop_w": crop_w, "crop_pos_x": crop_pos_x, "crop_pos_y": crop_pos_y, "interpolation_type": interpolation_type, "output_layout": output_layout, "output_dtype": output_dtype}
+    crop_resized_image = b.resizeCropFixed(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (crop_resized_image)
 

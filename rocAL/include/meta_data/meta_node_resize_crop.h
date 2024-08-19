@@ -21,14 +21,23 @@ THE SOFTWARE.
 */
 
 #pragma once
+#include <memory>
+#include <set>
 
-#include "meta_data/meta_node_crop.h"
-#include "meta_data/meta_node_crop_mirror_normalize.h"
-#include "meta_data/meta_node_crop_resize.h"
-#include "meta_data/meta_node_flip.h"
-#include "meta_data/meta_node_resize.h"
-#include "meta_data/meta_node_resize_crop_mirror.h"
-#include "meta_data/meta_node_resize_crop.h"
-#include "meta_data/meta_node_resize_mirror_normalize.h"
-#include "meta_data/meta_node_rotate.h"
-#include "meta_data/meta_node_ssd_random_crop.h"
+#include "meta_data/bounding_box_graph.h"
+#include "meta_data/meta_data.h"
+#include "pipeline/node.h"
+#include "augmentations/geometry_augmentations/node_resize_crop.h"
+#include "parameters/parameter_vx.h"
+class ResizeCropMetaNode : public MetaNode {
+   public:
+    ResizeCropMetaNode(){};
+    void update_parameters(pMetaDataBatch input_meta_data, pMetaDataBatch output_meta_data) override;
+    std::shared_ptr<ResizeCropNode> _node = nullptr;
+
+   private:
+    void initialize();
+    std::shared_ptr<RocalCropParam> _meta_crop_param;
+    vx_array _x1, _y1, _x2, _y2;
+    std::vector<uint> _x1_val, _y1_val, _x2_val, _y2_val;
+};
