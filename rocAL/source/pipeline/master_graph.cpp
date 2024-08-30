@@ -2182,8 +2182,10 @@ void MasterGraph::update_roi_random_crop() {
             // check if crop_shape, roi_end is greater than input_shape
             if(crop_shape[j] > input_shape[j])
                 THROW("crop shape cannot be greater than input shape");
-            if (roi_end[j] > input_shape[j])
-                THROW("ROI shape cannot be greater than input shape");
+            if (roi_end[j] > input_shape[j]) {
+                ERR("ROI shape (" + std::to_string(roi_end[j]) + ") cannot be greater than input shape (" + std::to_string(input_shape[j]) + ")");
+                crop_begin[j] = 0;
+            }
 
             int roi_length = roi_end[j] - roi_begin[j];
             int crop_length = crop_shape[j];
