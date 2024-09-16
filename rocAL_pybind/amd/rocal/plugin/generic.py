@@ -108,14 +108,14 @@ class ROCALNumpyIterator(object):
                 roi_output_list.append(
                     self.output_list[i][:, :self.max_roi_size[0], :self.max_roi_size[1], :self.max_roi_size[2], :self.max_roi_size[3]])
             # Check if last batch policy is partial and only return the valid images in last batch
-            if (self.last_batch_policy is (types.LAST_BATCH_PARTIAL)) and b.getRemainingImages(self.loader._handle) <= 0:
+            if (self.last_batch_policy is (types.LAST_BATCH_PARTIAL)) and b.getRemainingImages(self.loader._handle) < self.batch_size:
                 if (self.last_batch_size is None):
                     self.last_batch_size = self.batch_size - \
                         b.getLastBatchPaddedSize(self.loader._handle)
                 return [inner_list[0:self.last_batch_size, :] for inner_list in roi_output_list]
             return roi_output_list
         # Check if last batch policy is partial and only return the valid images in last batch
-        if (self.last_batch_policy is (types.LAST_BATCH_PARTIAL)) and b.getRemainingImages(self.loader._handle) <= 0:
+        if (self.last_batch_policy is (types.LAST_BATCH_PARTIAL)) and b.getRemainingImages(self.loader._handle) < self.batch_size:
             if (self.last_batch_size is None):
                 self.last_batch_size = self.batch_size - \
                     b.getLastBatchPaddedSize(self.loader._handle)

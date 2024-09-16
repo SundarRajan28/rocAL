@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2019 - 2022 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -33,20 +33,24 @@ class NumpyLoaderNode : public Node {
     NumpyLoaderNode(Tensor *output, void *device_resources);
     ~NumpyLoaderNode() override;
     NumpyLoaderNode() = delete;
-    ///
+
     /// \param internal_shard_count Defines the amount of parallelism user wants for the load and decode process to be handled internally.
-    /// \param source_path Defines the path that includes the image dataset
-    /// \param load_batch_count Defines the quantum count of the images to be loaded. It's usually equal to the user's batch size.
-    /// The loader will repeat images if necessary to be able to have images in multiples of the load_batch_count,
-    /// for example if there are 10 images in the dataset and load_batch_count is 3, the loader repeats 2 images as if there are 12 images available.
+    /// \param source_path Defines the path that includes the Audio dataset
+    /// \param storage_type Determines the storage type
+    /// \param decoder_type Determines the decoder_type
+    /// \param shuffle Determines if the user wants to shuffle the dataset or not.
+    /// \param loop Determines if the user wants to indefinitely loops through audios or not.
+    /// \param load_batch_count Defines the quantum count of the files to be loaded. It's usually equal to the user's batch size.
+    /// \param mem_type Memory type, host or device
+    /// \param sharding_info The members of RocalShardingInfo determines how the data is distributed among the shards and how the last batch is processed by the pipeline.
     void init(unsigned internal_shard_count, const std::string &source_path, const std::vector<std::string> &files, StorageType storage_type, DecoderType decoder_type, bool shuffle, bool loop,
-              size_t load_batch_count, RocalMemType mem_type, unsigned seed = 0, bool decoder_keep_orig = false, const std::map<std::string, std::string> feature_key_map = std::map<std::string, std::string>(), const char *prefix = "", unsigned sequence_length = 0, unsigned step = 0, unsigned stride = 0);
+              size_t load_batch_count, RocalMemType mem_type, unsigned seed = 0, const ShardingInfo& sharding_info = ShardingInfo());
 
     std::shared_ptr<LoaderModule> get_loader_module();
 
    protected:
-    void create_node() override{};
-    void update_node() override{};
+    void create_node() override {};
+    void update_node() override {};
 
    private:
     std::shared_ptr<NumpyLoaderSharded> _loader_module = nullptr;

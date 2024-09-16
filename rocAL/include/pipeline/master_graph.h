@@ -481,15 +481,17 @@ inline std::shared_ptr<VideoLoaderSingleShardNode> MasterGraph::add_node(const s
  * Explicit specialization for AudioLoaderNode
  */
 template<> inline std::shared_ptr<AudioLoaderNode> MasterGraph::add_node(const std::vector<Tensor*>& inputs, const std::vector<Tensor*>& outputs) {
-    if(_loader_module)
-        THROW("A loader already exists, cannot have more than one loader")
+    // if(_loader_module)
+    //     THROW("A loader already exists, cannot have more than one loader")
 #if ENABLE_HIP || ENABLE_OPENCL
     auto node = std::make_shared<AudioLoaderNode>(outputs[0], (void *)_device.resources());
 #else
     auto node = std::make_shared<AudioLoaderNode>(outputs[0], nullptr);
 #endif
-    _loader_module = node->GetLoaderModule();
-    _loader_module->set_prefetch_queue_depth(_prefetch_queue_depth);
+    auto loader_module = node->GetLoaderModule();
+    loader_module->set_prefetch_queue_depth(_prefetch_queue_depth);
+    _loader_modules.emplace_back(loader_module);
+    node->set_id(_loader_modules.size() - 1);
     _root_nodes.push_back(node);
     for(auto& output: outputs)
         _tensor_map.insert(make_pair(output, node));
@@ -498,15 +500,17 @@ template<> inline std::shared_ptr<AudioLoaderNode> MasterGraph::add_node(const s
 }
 
 template<> inline std::shared_ptr<AudioLoaderSingleShardNode> MasterGraph::add_node(const std::vector<Tensor*>& inputs, const std::vector<Tensor*>& outputs) {
-    if(_loader_module)
-        THROW("A loader already exists, cannot have more than one loader")
+    // if(_loader_module)
+    //     THROW("A loader already exists, cannot have more than one loader")
 #if ENABLE_HIP || ENABLE_OPENCL
     auto node = std::make_shared<AudioLoaderSingleShardNode>(outputs[0], (void *)_device.resources());
 #else
     auto node = std::make_shared<AudioLoaderSingleShardNode>(outputs[0], nullptr);
 #endif
-    _loader_module = node->GetLoaderModule();
-    _loader_module->set_prefetch_queue_depth(_prefetch_queue_depth);
+    auto loader_module = node->GetLoaderModule();
+    loader_module->set_prefetch_queue_depth(_prefetch_queue_depth);
+    _loader_modules.emplace_back(loader_module);
+    node->set_id(_loader_modules.size() - 1);
     _root_nodes.push_back(node);
     for(auto& output: outputs)
         _tensor_map.insert(make_pair(output, node));

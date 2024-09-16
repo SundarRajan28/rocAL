@@ -123,6 +123,7 @@ class Pipeline(object):
         self._external_source = None
         self._external_source_mode = None
         self._last_batch_policy = None
+        self._shard_size = None
 
     def build(self):
         """!Build the pipeline using rocalVerify call

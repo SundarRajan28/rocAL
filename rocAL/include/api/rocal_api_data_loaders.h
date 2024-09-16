@@ -625,19 +625,18 @@ extern "C" RocalTensor ROCAL_API_CALL rocalRawTFRecordSourceSingleShard(RocalCon
  * \param [in] is_output Determines if the user wants the loaded images to be part of the output or not.
  * \param [in] shuffle Determines if the user wants to shuffle the dataset or not.
  * \param [in] loop Determines if the user wants to indefinitely loops through images or not.
- * \param [in] decode_size_policy Decode size policy used for the loader
+ * \param [in] rocal_sharding_info The members of RocalShardingInfo determines how the data is distributed among the shards and how the last batch is processed by the pipeline.
  * \return Reference to the output tensor
  */
-extern "C"  RocalTensor  ROCAL_API_CALL rocalNumpyFileSource(
-                 RocalContext p_context,
-                 const char* source_path,
-                 unsigned internal_shard_count,
-                 std::vector<std::string> files = {},
-                 bool is_output = false,
-                 bool shuffle = false,
-                 bool loop = false,
-                 RocalImageSizeEvaluationPolicy decode_size_policy = ROCAL_USE_MAX_SIZE,
-                 unsigned seed = 0);
+extern "C" RocalTensor ROCAL_API_CALL rocalNumpyFileSource(RocalContext p_context,
+                                                           const char* source_path,
+                                                           unsigned internal_shard_count,
+                                                           std::vector<std::string> files = {},
+                                                           bool is_output = false,
+                                                           bool shuffle = false,
+                                                           bool loop = false,
+                                                           unsigned seed = 0,
+                                                           RocalShardingInfo rocal_sharding_info = RocalShardingInfo());
 
 /*! \brief Creates Numpy raw data reader and loader. It allocates the resources and objects required to read raw data stored on the numpy arrays.
  * \ingroup group_rocal_data_loaders
@@ -646,22 +645,21 @@ extern "C"  RocalTensor  ROCAL_API_CALL rocalNumpyFileSource(
  * \param [in] is_output Determines if the user wants the loaded images to be part of the output or not.
  * \param [in] shuffle Determines if the user wants to shuffle the dataset or not.
  * \param [in] loop Determines if the user wants to indefinitely loops through images or not.
- * \param [in] decode_size_policy Decode size policy used for the loader
  * \param [in] shard_id Shard id for this loader
  * \param [in] shard_count Total shard count
+ * \param [in] rocal_sharding_info The members of RocalShardingInfo determines how the data is distributed among the shards and how the last batch is processed by the pipeline.
  * \return Reference to the output tensor
  */
-extern "C"  RocalTensor  rocalNumpyFileSourceSingleShard(
-                 RocalContext p_context,
-                 const char* source_path,
-                 std::vector<std::string> files = {},
-                 bool is_output = false,
-                 bool shuffle = false,
-                 bool loop = false,
-                 RocalImageSizeEvaluationPolicy decode_size_policy = ROCAL_USE_MAX_SIZE,
-                 unsigned shard_id = 0,
-                 unsigned shard_count = 1,
-                 unsigned seed = 0);
+extern "C" RocalTensor rocalNumpyFileSourceSingleShard(RocalContext p_context,
+                                                       const char* source_path,
+                                                       std::vector<std::string> files = {},
+                                                       bool is_output = false,
+                                                       bool shuffle = false,
+                                                       bool loop = false,
+                                                       unsigned shard_id = 0,
+                                                       unsigned shard_count = 1,
+                                                       unsigned seed = 0,
+                                                       RocalShardingInfo rocal_sharding_info = RocalShardingInfo());
 
 /*!
  * \brief Creates a video reader and decoder as a source. It allocates the resources and objects required to read and decode mp4 videos stored on the file systems.

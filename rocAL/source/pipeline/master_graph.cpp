@@ -495,18 +495,23 @@ MasterGraph::mem_type() {
 
 size_t
 MasterGraph::last_batch_padded_size() {
-    return _loader_module->last_batch_padded_size();
+    size_t max_last_batch_padded_size = 0;
+    for (auto loader_module : _loader_modules)
+        max_last_batch_padded_size = (loader_module->last_batch_padded_size() > max_last_batch_padded_size) ? loader_module->last_batch_padded_size() : max_last_batch_padded_size;
+    return max_last_batch_padded_size;
 }
 
 Timing
 MasterGraph::timing() {
     Timing t;
     for (auto loader_module : _loader_modules) {
-        t = loader_module->timing();
-        t.process_time += _process_time.get_timing();
-        t.copy_to_output += _convert_time.get_timing();
-        t.bb_process_time += _bencode_time.get_timing();
+        Timing loader_time = loader_module->timing();
+        t.read_time = (t.read_time > loader_time.read_time) ? t.read_time : loader_time.read_time;
+        t.process_time += loader_time.process_time;
     }
+    t.process_time += _process_time.get_timing();
+    t.copy_to_output += _convert_time.get_timing();
+    t.bb_process_time += _bencode_time.get_timing();
     return t;
 }
 
@@ -1024,12 +1029,8 @@ void MasterGraph::output_routine() {
             _process_time.end();
 
             auto write_roi_buffers = write_buffers.second;   // Obtain ROI buffers from ring buffer
-            // for (size_t idx = 0; idx < _internal_tensor_list.size(); idx++)
-            //     _internal_tensor_list[idx]->copy_roi(write_roi_buffers[idx]);   // Copy ROI from internal tensor's buffer to ring buffer
-            for (size_t idx = 0; idx < _internal_tensor_list.size(); idx++) {
+            for (size_t idx = 0; idx < _internal_tensor_list.size(); idx++)
                 _internal_tensor_list[idx]->copy_roi(write_roi_buffers[idx]);   // Copy ROI from internal tensor's buffer to ring buffer
-                std::cout << "[output_routine]: " << full_batch_data_names[0] << " (" << write_roi_buffers[idx][4] << ", " << write_roi_buffers[idx][5] << ", " << write_roi_buffers[idx][6] << ", " << write_roi_buffers[idx][7] << ")\n";
-        }
             _bencode_time.start();
             if (_is_box_encoder) {
                 auto bbox_encode_write_buffers = _ring_buffer.get_box_encode_write_buffers();
@@ -1139,10 +1140,8 @@ void MasterGraph::output_routine_multiple_loaders() {
             _process_time.end();
 
             auto write_roi_buffers = write_buffers.second;   // Obtain ROI buffers from ring buffer
-            for (size_t idx = 0; idx < _internal_tensor_list.size(); idx++) {
+            for (size_t idx = 0; idx < _internal_tensor_list.size(); idx++)
                 _internal_tensor_list[idx]->copy_roi(write_roi_buffers[idx]);   // Copy ROI from internal tensor's buffer to ring buffer
-                std::cout << "[output_routine]: " << full_batch_image_names[0] << " (" << write_roi_buffers[idx][4] << ", " << write_roi_buffers[idx][5] << ", " << write_roi_buffers[idx][6] << ", " << write_roi_buffers[idx][7] << ")\n";
-        }
 
             /*_bencode_time.start();
             if (_is_box_encoder) {

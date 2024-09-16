@@ -38,8 +38,9 @@ class ROCALNumpyIterator(object):
         self.output_list = None
         self.batch_size = self.loader._batch_size
         self.return_max_roi = return_max_roi
-        print("self.device", self.device)
         self.len = b.getRemainingImages(self.loader._handle)
+        self.last_batch_policy = self.loader._last_batch_policy
+        self.last_batch_size = None
 
     def next(self):
         return self.__next__()
@@ -48,7 +49,6 @@ class ROCALNumpyIterator(object):
         if self.loader.rocal_run() != 0:
             raise StopIteration
         self.output_tensor_list = self.loader.get_output_tensors()
-        self.img_names_length = np.empty(self.batch_size, dtype="int32")
 
         if self.output_list is None:
             # Output list used to store pipeline outputs - can support multiple augmentation outputs
@@ -56,25 +56,21 @@ class ROCALNumpyIterator(object):
             for i in range(len(self.output_tensor_list)):
                 dimensions = self.output_tensor_list[i].dimensions()
                 if self.return_max_roi:
-                    self.img_names_size = self.loader.get_image_name_length(self.img_names_length)
-                    self.img_name = self.loader.get_image_name(self.img_names_size)
-                    self.img_name=self.img_name.decode('utf_8')
                     self.num_dims = len(dimensions) - 1
                     self.roi_array = np.zeros(self.batch_size * self.num_dims * 2, dtype=np.uint32)
                     self.output_tensor_list[i].copy_roi(self.roi_array)
-                    print(self.img_name, tuple(self.roi_array[4:]))
-                    # self.max_roi_size = np.zeros(self.num_dims, dtype=np.uint32)
-                    # for j in range(self.batch_size):
-                    #     index = j * self.num_dims * 2
-                    #     roi_size = self.roi_array[index + self.num_dims : index + self.num_dims * 2] - self.roi_array[index : index + self.num_dims]
-                    #     self.max_roi_size = np.maximum(roi_size, self.max_roi_size)
+                    self.max_roi_size = np.zeros(self.num_dims, dtype=np.uint32)
+                    for j in range(self.batch_size):  # Calculating the max ROI for a batch
+                        index = j * self.num_dims * 2
+                        roi_size = self.roi_array[index + self.num_dims: index +
+                                                  self.num_dims * 2] - self.roi_array[index: index + self.num_dims]
+                        self.max_roi_size = np.maximum(roi_size, self.max_roi_size)
+                torch_dtype = self.output_tensor_list[i].dtype()
                 if self.device == "cpu":
-                    torch_dtype = self.output_tensor_list[i].dtype()
                     output = torch.empty(
                         dimensions, dtype=getattr(torch, torch_dtype))
                 else:
                     torch_gpu_device = torch.device('cuda', self.device_id)
-                    torch_dtype = self.output_tensor_list[i].dtype()
                     output = torch.empty(dimensions, dtype=getattr(
                         torch, torch_dtype), device=torch_gpu_device)
 
@@ -84,26 +80,33 @@ class ROCALNumpyIterator(object):
         else:
             for i in range(len(self.output_tensor_list)):
                 if self.return_max_roi:
-                    self.img_names_size = self.loader.get_image_name_length(self.img_names_length)
-                    self.img_name = self.loader.get_image_name(self.img_names_size)
-                    self.img_name=self.img_name.decode('utf_8')
                     self.output_tensor_list[i].copy_roi(self.roi_array)
-                    print(self.img_name, tuple(self.roi_array[4:]))
-                    # self.max_roi_size = np.zeros(self.num_dims, dtype=np.uint32)
-                    # for j in range(self.batch_size):
-                    #     index = j * self.num_dims * 2
-                    #     roi_size = self.roi_array[index + self.num_dims : index + self.num_dims * 2] - self.roi_array[index : index + self.num_dims]
-                    #     self.max_roi_size = np.maximum(roi_size, self.max_roi_size)
+                    self.max_roi_size = np.zeros(self.num_dims, dtype=np.uint32)
+                    for j in range(self.batch_size):
+                        index = j * self.num_dims * 2
+                        roi_size = self.roi_array[index + self.num_dims: index +
+                                                  self.num_dims * 2] - self.roi_array[index: index + self.num_dims]
+                        self.max_roi_size = np.maximum(roi_size, self.max_roi_size)
                 self.output_tensor_list[i].copy_data(ctypes.c_void_p(
                     self.output_list[i].data_ptr()), self.output_memory_type)
         if self.return_max_roi:
             roi_output_list = []
             for i in range(len(self.output_list)):
-                for j in range(self.batch_size):
-                    index = j * self.num_dims * 2
-                    roi_size = self.roi_array[index + self.num_dims : index + self.num_dims * 2] - self.roi_array[index : index + self.num_dims]
-                    roi_output_list.append(self.output_list[i][:, :roi_size[0], :roi_size[1], :roi_size[2], :roi_size[3]])
+                roi_output_list.append(
+                    self.output_list[i][:, :self.max_roi_size[0], :self.max_roi_size[1], :self.max_roi_size[2], :self.max_roi_size[3]])
+            # Check if last batch policy is partial and only return the valid images in last batch
+            if (self.last_batch_policy is (types.LAST_BATCH_PARTIAL)) and b.getRemainingImages(self.loader._handle) < self.batch_size:
+                if (self.last_batch_size is None):
+                    self.last_batch_size = self.batch_size - \
+                        b.getLastBatchPaddedSize(self.loader._handle)
+                return [inner_list[0:self.last_batch_size, :] for inner_list in roi_output_list]
             return roi_output_list
+        # Check if last batch policy is partial and only return the valid images in last batch
+        if (self.last_batch_policy is (types.LAST_BATCH_PARTIAL)) and b.getRemainingImages(self.loader._handle) < self.batch_size:
+            if (self.last_batch_size is None):
+                self.last_batch_size = self.batch_size - \
+                    b.getLastBatchPaddedSize(self.loader._handle)
+            return [inner_list[0:self.last_batch_size, :] for inner_list in self.output_list]
         return self.output_list
 
     def reset(self):

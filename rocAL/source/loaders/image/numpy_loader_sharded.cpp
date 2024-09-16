@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2019 - 2022 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -67,6 +67,7 @@ LoaderModuleStatus NumpyLoaderSharded::load_next() {
 
     return ret;
 }
+
 void NumpyLoaderSharded::initialize(ReaderConfig reader_cfg, DecoderConfig decoder_cfg, RocalMemType mem_type,
                                     unsigned batch_size, bool keep_orig_size) {
     if (_initialized)
@@ -88,6 +89,7 @@ void NumpyLoaderSharded::initialize(ReaderConfig reader_cfg, DecoderConfig decod
     }
     _initialized = true;
 }
+
 void NumpyLoaderSharded::start_loading() {
     for (unsigned i = 0; i < _loaders.size(); i++) {
         _loaders[i]->start_loading();
@@ -135,7 +137,6 @@ void NumpyLoaderSharded::increment_loader_idx() {
 
 Timing NumpyLoaderSharded::timing() {
     Timing t;
-    long long unsigned max_decode_time = 0;
     long long unsigned max_read_time = 0;
     long long unsigned swap_handle_time = 0;
 
@@ -144,10 +145,8 @@ Timing NumpyLoaderSharded::timing() {
     for (auto& loader : _loaders) {
         auto info = loader->timing();
         max_read_time = (info.read_time > max_read_time) ? info.read_time : max_read_time;
-        max_decode_time = (info.decode_time > max_decode_time) ? info.decode_time : max_decode_time;
         swap_handle_time += info.process_time;
     }
-    t.decode_time = max_decode_time;
     t.read_time = max_read_time;
     t.process_time = swap_handle_time;
     return t;
@@ -156,7 +155,7 @@ Timing NumpyLoaderSharded::timing() {
 size_t NumpyLoaderSharded::last_batch_padded_size() {
     size_t last_batch_padded_size = 0;
     for (auto& loader : _loaders) {
-        if (!last_batch_padded_size)
+        if (last_batch_padded_size == 0)
             last_batch_padded_size = loader->last_batch_padded_size();
         if (last_batch_padded_size != loader->last_batch_padded_size())
             THROW("All loaders must have the same last batch padded size");

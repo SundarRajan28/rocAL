@@ -170,23 +170,23 @@ struct ImageRecordIOHeader {
 };
 
 struct NumpyHeaderData {
-    public:
-    std::vector<unsigned> _shape;
-    RocalTensorDataType _type_info;
-    bool _fortran_order = false;
-    int64_t _data_offset = 0;
+   public:
+    std::vector<unsigned> array_shape;
+    RocalTensorDataType type_info;
+    bool fortran_order = false;
+    int64_t data_offset = 0;
 
-    RocalTensorDataType type() const { return _type_info; };
+    RocalTensorDataType type() const { return type_info; };
 
     size_t size() const {
         size_t num_elements = 1;
-        for (const auto& dim: _shape)
+        for (const auto &dim : array_shape)
             num_elements *= dim;
         return num_elements;
     };
 
-    size_t nbytes() const { return tensor_data_size(_type_info) * size(); }
-    std::vector<unsigned> shape() const { return _shape; }
+    size_t nbytes() const { return tensor_data_size(type_info) * size(); }
+    std::vector<unsigned> shape() const { return array_shape; }
 };
 
 class Reader {
@@ -242,7 +242,6 @@ class Reader {
     virtual std::string get_root_folder_path() { return {}; }
 
     virtual std::vector<std::string> get_file_paths_from_meta_data_reader() { return {}; }
-
     //! Returns the number of images in the last batch
     virtual size_t last_batch_padded_size() { return 0; }
 };
