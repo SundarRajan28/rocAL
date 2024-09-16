@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import random
+import numpy as np
 
 from amd.rocal.pipeline import Pipeline
 from amd.rocal.plugin.pytorch import ROCALNumpyIterator
@@ -59,66 +60,66 @@ def main():
 
     import time
     start = time.time()
-    pipeline = Pipeline(batch_size=batch_size, num_threads=8, device_id=device_id, seed=device_id, rocal_cpu=rocal_cpu, prefetch_queue_depth=6, output_memory_type = types.DEVICE_MEMORY)
+    # pipeline = Pipeline(batch_size=batch_size, num_threads=8, device_id=device_id, seed=device_id, rocal_cpu=rocal_cpu, prefetch_queue_depth=6 if not rocal_cpu else 2, output_memory_type = types.DEVICE_MEMORY)
 
-    with pipeline:
-        numpy_reader_output = fn.readers.numpy(file_root=data_path, files=x_train, shard_id=local_rank, num_shards=world_size, random_shuffle=True, seed=random_seed+local_rank)
-        numpy_reader_output1 = fn.readers.numpy(file_root=data_path, files=y_train, shard_id=local_rank, num_shards=world_size, random_shuffle=True, seed=random_seed+local_rank)
-        data_output = fn.set_layout(numpy_reader_output, output_layout=types.NCDHW)
-        label_output = fn.set_layout(numpy_reader_output1, output_layout=types.NCDHW)
-        [roi_start, roi_end] = fn.random_object_bbox(label_output, format="start_end", k_largest=2, foreground_prob=0.4, cache_objects=False)
-        anchor = fn.roi_random_crop(label_output, roi_start=roi_start, roi_end=roi_end, crop_shape=(1, 128, 128, 128))
-        data_sliced_output = fn.slice(data_output, anchor=anchor, shape=(1,128,128,128), output_layout=types.NCDHW, output_dtype=types.FLOAT)
-        label_sliced_output = fn.slice(label_output, anchor=anchor, shape=(1,128,128,128), output_layout=types.NCDHW, output_dtype=types.UINT8)       
-        hflip = fn.random.coin_flip(probability=0.33)
-        vflip = fn.random.coin_flip(probability=0.33)
-        dflip = fn.random.coin_flip(probability=0.33)
-        data_flip_output = fn.flip(data_sliced_output, horizontal=hflip, vertical=vflip, depth=dflip, output_layout=types.NCDHW, output_dtype=types.FLOAT)
-        label_flip_output = fn.flip(label_sliced_output, horizontal=hflip, vertical=vflip, depth=dflip, output_layout=types.NCDHW, output_dtype=types.UINT8)
-        brightness = fn.random.uniform_rand(range=[0.7, 1.3])
-        add_brightness = fn.random.coin_flip(probability=0.1)
-        brightness_output = fn.brightness(data_flip_output, brightness=brightness, brightness_shift=0.0, conditional_execution=add_brightness, output_layout=types.NCDHW, output_dtype=types.FLOAT)
-        add_noise = fn.random.coin_flip(probability=0.1)
-        std_dev = fn.random.uniform_rand(range=[0.0, 0.1])
-        noise_output = fn.gaussian_noise(brightness_output, mean=0.0, std_dev=std_dev, conditional_execution=add_noise, output_layout=types.NCDHW, output_dtype=types.FLOAT)
-        pipeline.set_outputs(noise_output, label_flip_output)
+    # with pipeline:
+    #     numpy_reader_output = fn.readers.numpy(file_root=data_path, files=x_train, shard_id=local_rank, num_shards=world_size, random_shuffle=True, seed=random_seed+local_rank)
+    #     numpy_reader_output1 = fn.readers.numpy(file_root=data_path, files=y_train, shard_id=local_rank, num_shards=world_size, random_shuffle=True, seed=random_seed+local_rank)
+    #     data_output = fn.set_layout(numpy_reader_output, output_layout=types.NCDHW)
+    #     label_output = fn.set_layout(numpy_reader_output1, output_layout=types.NCDHW)
+    #     [roi_start, roi_end] = fn.random_object_bbox(label_output, format="start_end", k_largest=2, foreground_prob=0.4, cache_objects=False)
+    #     anchor = fn.roi_random_crop(label_output, roi_start=roi_start, roi_end=roi_end, crop_shape=(1, 128, 128, 128))
+    #     data_sliced_output = fn.slice(data_output, anchor=anchor, shape=(1,128,128,128), output_layout=types.NCDHW, output_dtype=types.FLOAT)
+    #     label_sliced_output = fn.slice(label_output, anchor=anchor, shape=(1,128,128,128), output_layout=types.NCDHW, output_dtype=types.UINT8)       
+    #     hflip = fn.random.coin_flip(probability=0.33)
+    #     vflip = fn.random.coin_flip(probability=0.33)
+    #     dflip = fn.random.coin_flip(probability=0.33)
+    #     data_flip_output = fn.flip(data_sliced_output, horizontal=hflip, vertical=vflip, depth=dflip, output_layout=types.NCDHW, output_dtype=types.FLOAT)
+    #     label_flip_output = fn.flip(label_sliced_output, horizontal=hflip, vertical=vflip, depth=dflip, output_layout=types.NCDHW, output_dtype=types.UINT8)
+    #     brightness = fn.random.uniform_rand(range=[0.7, 1.3])
+    #     add_brightness = fn.random.coin_flip(probability=0.1)
+    #     brightness_output = fn.brightness(data_flip_output, brightness=brightness, brightness_shift=0.0, conditional_execution=add_brightness, output_layout=types.NCDHW, output_dtype=types.FLOAT)
+    #     add_noise = fn.random.coin_flip(probability=0.1)
+    #     std_dev = fn.random.uniform_rand(range=[0.0, 0.1])
+    #     noise_output = fn.gaussian_noise(brightness_output, mean=0.0, std_dev=std_dev, conditional_execution=add_noise, output_layout=types.NCDHW, output_dtype=types.FLOAT)
+    #     pipeline.set_outputs(noise_output, label_flip_output)
 
-    pipeline.build()
+    # pipeline.build()
 
     pipeline1 = Pipeline(batch_size=1, num_threads=8, device_id=device_id, seed=device_id, rocal_cpu=rocal_cpu, prefetch_queue_depth=6, output_memory_type = types.DEVICE_MEMORY)
 
     with pipeline1:
         numpy_reader_output = fn.readers.numpy(file_root=data_path, files=x_val, shard_id=local_rank, num_shards=world_size)
-        numpy_reader_output1 = fn.readers.numpy(file_root=data_path, files=y_val, shard_id=local_rank, num_shards=world_size)
+        # numpy_reader_output1 = fn.readers.numpy(file_root=data_path, files=y_val, shard_id=local_rank, num_shards=world_size)
         data_output = fn.set_layout(numpy_reader_output, output_layout=types.NCDHW)
-        label_output = fn.set_layout(numpy_reader_output1, output_layout=types.NCDHW)
-        pipeline1.set_outputs(data_output, label_output)
+        # label_output = fn.set_layout(numpy_reader_output1, output_layout=types.NCDHW)
+        pipeline1.set_outputs(data_output)
 
     pipeline1.build()
     
-    numpyIteratorPipeline = ROCALNumpyIterator(pipeline, device='gpu', device_id=device_id)
-    print(len(numpyIteratorPipeline))
+    # numpyIteratorPipeline = ROCALNumpyIterator(pipeline, device='gpu', device_id=device_id)
+    # print(len(numpyIteratorPipeline))
     valNumpyIteratorPipeline = ROCALNumpyIterator(pipeline1, device='gpu', return_max_roi=True, device_id=device_id)
     print(len(valNumpyIteratorPipeline))
     cnt = 0
-    for epoch in range(2):
-        print("+++++++++++++++++++++++++++++EPOCH+++++++++++++++++++++++++++++++++++++",epoch)
-        for i , it in enumerate(numpyIteratorPipeline):
-            print(i, it[0].shape, it[1].shape)
-            for j in range(batch_size):
-                print(it[0][j].cpu().numpy().shape, it[1][j].cpu().numpy().shape)
-                cnt += 1
-            print("************************************** i *************************************",i)
-        numpyIteratorPipeline.reset()
+    for epoch in range(1):
+        # print("+++++++++++++++++++++++++++++EPOCH+++++++++++++++++++++++++++++++++++++",epoch)
+        # for i , it in enumerate(numpyIteratorPipeline):
+        #     print(i, it[0].shape, it[1].shape)
+        #     for j in range(batch_size):
+        #         print(it[0][j].cpu().numpy().shape, it[1][j].cpu().numpy().shape)
+        #         cnt += 1
+        #     print("************************************** i *************************************",i)
+        # numpyIteratorPipeline.reset()
         for i , it in enumerate(valNumpyIteratorPipeline):
-            print(i, it[0].shape, it[1].shape)
-            for j in range(1):
-                print(it[0][j].cpu().numpy().shape, it[1][j].cpu().numpy().shape)
-                cnt += 1
-            print("************************************** i *************************************",i)
+            # print(i, it[0].shape, it[1].shape)
+            # for j in range(1):
+            # print(it[0].cpu().numpy().shape, it[1].cpu().numpy().shape)
+            cnt += 1
+            # print("************************************** i *************************************",i)
         valNumpyIteratorPipeline.reset()
-    print("*********************************************************************")
-    print(f'Took {time.time() - start} seconds')
+    # print("*********************************************************************")
+    # print(f'Took {time.time() - start} seconds')
 
 if __name__ == '__main__':
     main()

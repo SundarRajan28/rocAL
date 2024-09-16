@@ -309,6 +309,7 @@ void NumpyDataReader::ParseHeader(NumpyHeaderData& parsed_header, std::string fi
 
     ParseHeaderContents(parsed_header, header);
     parsed_header._data_offset = offset;
+    std::cout << "[ParseHeader]: " << file_path << " (" << parsed_header._shape[0] << ", " << parsed_header._shape[1] << ", " << parsed_header._shape[2] << ", " << parsed_header._shape[3] << ")\n";
 }
 
 size_t NumpyDataReader::read_numpy_data(void* buf, size_t read_size, std::vector<size_t> max_shape) {

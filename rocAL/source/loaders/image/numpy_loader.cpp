@@ -178,6 +178,7 @@ NumpyLoader::load_routine() {
                     THROW("Numpy arrays must contain readable data")
                 _decoded_data_info._data_names[file_counter] = _reader->id();
                 _tensor_roi[file_counter] = _reader->get_numpy_header_data().shape();
+                std::cout << "[load_routine]: " << _reader->id() << " (" << _reader->get_numpy_header_data().shape()[0] << ", " << _reader->get_numpy_header_data().shape()[1] << ", " << _reader->get_numpy_header_data().shape()[2] << ", " << _reader->get_numpy_header_data().shape()[3] << ")\n";
                 _reader->close();
                 file_counter++;
             }
@@ -185,6 +186,8 @@ NumpyLoader::load_routine() {
             _circ_buff.set_decoded_data_info(_decoded_data_info);
             _circ_buff.push();
             _image_counter += _output_tensor->info().batch_size();
+            _output_tensor->update_tensor_roi(_tensor_roi);
+            std::cout << "[after load_routine]: " << _decoded_data_info._data_names[0] << " (" << _tensor_roi[0][0] << ", " << _tensor_roi[0][1] << ", " << _tensor_roi[0][2] << ", " << _tensor_roi[0][3] << ")\n";
             load_status = LoaderModuleStatus::OK;
         }
         if (load_status != LoaderModuleStatus::OK) {
@@ -247,7 +250,8 @@ NumpyLoader::update_output_image() {
 
     _output_decoded_data_info = _circ_buff.get_decoded_data_info();
     _output_names = _output_decoded_data_info._data_names;
-    _output_tensor->update_tensor_roi(_tensor_roi);
+    // _output_tensor->update_tensor_roi(_tensor_roi);
+    // std::cout << "[update_output_image]: " << _output_names[0] << " (" << _tensor_roi[0][0] << ", " << _tensor_roi[0][1] << ", " << _tensor_roi[0][2] << ", " << _tensor_roi[0][3] << ")\n";
     _circ_buff.pop();
     if (!_loop)
         _remaining_image_count -= _batch_size;
