@@ -4,7 +4,7 @@ from __future__ import print_function
 import random
 
 from amd.rocal.pipeline import Pipeline
-from amd.rocal.plugin.pytorch import ROCALNumpyIterator
+from amd.rocal.plugin.generic import ROCALNumpyIterator
 import amd.rocal.fn as fn
 import amd.rocal.types as types
 import sys
@@ -56,8 +56,8 @@ def main():
     pipeline = Pipeline(batch_size=batch_size, num_threads=num_threads, device_id=device_id, seed=random_seed, rocal_cpu=rocal_cpu, prefetch_queue_depth=6)
 
     with pipeline:
-        numpy_reader_output = fn.readers.numpy(file_root=data_path, files=x_train, shard_id=local_rank, num_shards=world_size)
-        label_output = fn.readers.numpy(file_root=data_path, files=y_train, shard_id=local_rank, num_shards=world_size)
+        numpy_reader_output = fn.readers.numpy(file_root=data_path, files=x_train, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
+        label_output = fn.readers.numpy(file_root=data_path, files=y_train, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
         data_output = fn.set_layout(numpy_reader_output, output_layout=types.NHWC)
         normalized_output = fn.normalize(data_output, axes=[0,1], mean=MEAN, stddev=STDDEV, output_datatype=types.FLOAT)
         transposed_output = fn.transpose(normalized_output, perm=[2,0,1], output_layout=types.NCHW, output_dtype=types.FLOAT)
@@ -82,19 +82,19 @@ def main():
     valNumpyIteratorPipeline = ROCALNumpyIterator(val_pipeline, device='cpu' if rocal_cpu else 'gpu')
     print(len(valNumpyIteratorPipeline))
     cnt = 0
-    for epoch in range(2):
+    for epoch in range(1):
         print("+++++++++++++++++++++++++++++EPOCH+++++++++++++++++++++++++++++++++++++",epoch)
         for i , it in enumerate(numpyIteratorPipeline):
             print(i, it[0].shape, it[1].shape)
-            for j in range(batch_size):
-                print(it[0][j].cpu().numpy().shape, it[1][j].cpu().numpy().shape)
+            for j in range(len(it[0])):
+                print(it[0][j].shape, it[1][j].shape)
                 cnt += 1
             print("************************************** i *************************************",i)
         numpyIteratorPipeline.reset()
         for i , it in enumerate(valNumpyIteratorPipeline):
             print(i, it[0].shape, it[1].shape)
-            for j in range(batch_size):
-                print(it[0][j].cpu().numpy().shape, it[1][j].cpu().numpy().shape)
+            for j in range(len(it[0])):
+                print(it[0][j].shape, it[1][j].shape)
                 cnt += 1
             print("************************************** i *************************************",i)
         valNumpyIteratorPipeline.reset()

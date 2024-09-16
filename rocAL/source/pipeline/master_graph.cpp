@@ -470,7 +470,10 @@ MasterGraph::mem_type() {
 
 size_t
 MasterGraph::last_batch_padded_size() {
-    return _loader_module->last_batch_padded_size();
+    size_t max_last_batch_padded_size = 0;
+    for (auto loader_module : _loader_modules)
+        max_last_batch_padded_size = (loader_module->last_batch_padded_size() > max_last_batch_padded_size) ? loader_module->last_batch_padded_size() : max_last_batch_padded_size;
+    return max_last_batch_padded_size;
 }
 
 Timing

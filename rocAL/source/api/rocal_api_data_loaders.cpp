@@ -93,25 +93,10 @@ evaluate_image_data_set(RocalImageSizeEvaluationPolicy decode_size_policy, Stora
 };
 
 std::vector<size_t>
-evaluate_numpy_data_set(RocalImageSizeEvaluationPolicy decode_size_policy, StorageType storage_type,
-                        DecoderType decoder_type, const std::string &source_path, const std::vector<std::string> &files)
-{
-    auto translate_image_size_policy = [](RocalImageSizeEvaluationPolicy decode_size_policy)
-    {
-        switch(decode_size_policy)
-        {
-            case ROCAL_USE_MAX_SIZE:
-            case ROCAL_USE_MAX_SIZE_RESTRICTED:
-                return MaxSizeEvaluationPolicy::MAXIMUM_FOUND_SIZE;
-            case ROCAL_USE_MOST_FREQUENT_SIZE:
-                return MaxSizeEvaluationPolicy::MOST_FREQUENT_SIZE;
-            default:
-                return MaxSizeEvaluationPolicy::MAXIMUM_FOUND_SIZE;
-        }
-    };
-
+evaluate_numpy_data_set(StorageType storage_type, DecoderType decoder_type,
+                        const std::string& source_path, const std::vector<std::string>& files) {
     ImageSourceEvaluator source_evaluator;
-    source_evaluator.set_size_evaluation_policy(translate_image_size_policy(decode_size_policy));
+    source_evaluator.set_size_evaluation_policy(MaxSizeEvaluationPolicy::MAXIMUM_FOUND_SIZE);
     auto reader_cfg = ReaderConfig(storage_type, source_path);
     if (!files.empty())
         reader_cfg.set_files(files);
@@ -1713,22 +1698,21 @@ RocalTensor ROCAL_API_CALL
 rocalNumpyFileSource(
     RocalContext p_context,
     const char* source_path,
-    unsigned internal_shard_count,
+    unsigned shard_count,
     std::vector<std::string> files,
     bool is_output,
     bool shuffle,
     bool loop,
-    RocalImageSizeEvaluationPolicy decode_size_policy,
-    unsigned seed) {
+    unsigned seed,
+    RocalShardingInfo rocal_sharding_info) {
     Tensor* output = nullptr;
     auto context = static_cast<Context*>(p_context);
     try {
-        auto max_dimensions = evaluate_numpy_data_set(decode_size_policy, StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE,
+        auto max_dimensions = evaluate_numpy_data_set(StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE,
                                                       source_path, files);
 
-        RocalTensorlayout tensor_format = RocalTensorlayout::NONE;
         RocalTensorDataType tensor_data_type;
-        std::unordered_map<int, RocalTensorDataType> data_type_map = {
+        std::map<int, RocalTensorDataType> data_type_map = {
             {0, RocalTensorDataType::FP32},
             {1, RocalTensorDataType::FP16},
             {2, RocalTensorDataType::UINT8},
@@ -1736,9 +1720,8 @@ rocalNumpyFileSource(
             {4, RocalTensorDataType::UINT32},
             {5, RocalTensorDataType::INT32},
         };
-        auto dtype = max_dimensions.at(max_dimensions.size() - 1);
+        tensor_data_type = data_type_map[max_dimensions.back()];
         max_dimensions.pop_back();
-        tensor_data_type = data_type_map[dtype];
         unsigned num_of_dims = max_dimensions.size() + 1;
         std::vector<size_t> dims;
         dims.resize(num_of_dims);
@@ -1748,11 +1731,11 @@ rocalNumpyFileSource(
         auto info = TensorInfo(std::vector<size_t>(std::move(dims)),
                                context->master_graph->mem_type(),
                                tensor_data_type);
-        info.set_tensor_layout(tensor_format);
         info.set_max_shape();
         output = context->master_graph->create_loader_output_tensor(info);
 
-        context->master_graph->add_node<NumpyLoaderNode>({}, {output})->init(internal_shard_count, source_path, files, StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE, shuffle, loop, context->user_batch_size(), context->master_graph->mem_type(), seed);
+        ShardingInfo sharding_info(convert_last_batch_policy(rocal_sharding_info.last_batch_policy), rocal_sharding_info.pad_last_batch_repeated, rocal_sharding_info.stick_to_shard, rocal_sharding_info.shard_size);
+        context->master_graph->add_node<NumpyLoaderNode>({}, {output})->init(shard_count, source_path, files, StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE, shuffle, loop, context->user_batch_size(), context->master_graph->mem_type(), seed, sharding_info);
         context->master_graph->set_loop(loop);
 
         if (is_output) {
@@ -1775,10 +1758,10 @@ rocalNumpyFileSourceSingleShard(
     bool is_output,
     bool shuffle,
     bool loop,
-    RocalImageSizeEvaluationPolicy decode_size_policy,
     unsigned shard_id,
     unsigned shard_count,
-    unsigned seed) {
+    unsigned seed,
+    RocalShardingInfo rocal_sharding_info) {
     Tensor* output = nullptr;
     auto context = static_cast<Context*>(p_context);
     try {
@@ -1788,12 +1771,11 @@ rocalNumpyFileSourceSingleShard(
         if (shard_id >= shard_count)
             THROW("Shard id should be smaller than shard count")
 
-        auto max_dimensions = evaluate_numpy_data_set(decode_size_policy, StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE,
+        auto max_dimensions = evaluate_numpy_data_set(StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE,
                                                       source_path, files);
 
-        RocalTensorlayout tensor_format = RocalTensorlayout::NONE;
         RocalTensorDataType tensor_data_type;
-        std::unordered_map<int, RocalTensorDataType> data_type_map = {
+        std::map<int, RocalTensorDataType> data_type_map = {
             {0, RocalTensorDataType::FP32},
             {1, RocalTensorDataType::FP16},
             {2, RocalTensorDataType::UINT8},
@@ -1813,11 +1795,11 @@ rocalNumpyFileSourceSingleShard(
         auto info = TensorInfo(std::vector<size_t>(std::move(dims)),
                                context->master_graph->mem_type(),
                                tensor_data_type);
-        info.set_tensor_layout(tensor_format);
         info.set_max_shape();
         output = context->master_graph->create_loader_output_tensor(info);
 
-        context->master_graph->add_node<NumpyLoaderSingleShardNode>({}, {output})->init(shard_id, shard_count, source_path, files, StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE, shuffle, loop, context->user_batch_size(), context->master_graph->mem_type(), seed);
+        ShardingInfo sharding_info(convert_last_batch_policy(rocal_sharding_info.last_batch_policy), rocal_sharding_info.pad_last_batch_repeated, rocal_sharding_info.stick_to_shard, rocal_sharding_info.shard_size);
+        context->master_graph->add_node<NumpyLoaderSingleShardNode>({}, {output})->init(shard_id, shard_count, source_path, files, StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE, shuffle, loop, context->user_batch_size(), context->master_graph->mem_type(), seed, sharding_info);
         context->master_graph->set_loop(loop);
 
         if (is_output) {

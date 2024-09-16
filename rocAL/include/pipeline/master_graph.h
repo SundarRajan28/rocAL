@@ -419,46 +419,6 @@ inline std::shared_ptr<VideoLoaderSingleShardNode> MasterGraph::add_node(const s
 }
 #endif
 
-template <>
-inline std::shared_ptr<NumpyLoaderNode> MasterGraph::add_node(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs) {
-    // if (_loader_module)
-    //     THROW("A loader already exists, cannot have more than one loader")
-#if ENABLE_HIP || ENABLE_OPENCL
-    auto node = std::make_shared<NumpyLoaderNode>(outputs[0], (void *)_device.resources());
-#else
-    auto node = std::make_shared<NumpyLoaderNode>(outputs[0], nullptr);
-#endif
-    auto loader_module = node->get_loader_module();
-    loader_module->set_prefetch_queue_depth(_prefetch_queue_depth);
-    _loader_modules.emplace_back(loader_module);
-    node->set_id(_loader_modules.size() - 1);
-    _root_nodes.push_back(node);
-    for (auto &output : outputs)
-        _tensor_map.insert(std::make_pair(output, node));
-
-    return node;
-}
-
-template <>
-inline std::shared_ptr<NumpyLoaderSingleShardNode> MasterGraph::add_node(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs) {
-    // if (_loader_module)
-    //     THROW("A loader already exists, cannot have more than one loader")
-#if ENABLE_HIP || ENABLE_OPENCL
-    auto node = std::make_shared<NumpyLoaderSingleShardNode>(outputs[0], (void *)_device.resources());
-#else
-    auto node = std::make_shared<NumpyLoaderSingleShardNode>(outputs[0], nullptr);
-#endif
-    auto loader_module = node->get_loader_module();
-    loader_module->set_prefetch_queue_depth(_prefetch_queue_depth);
-    _loader_modules.emplace_back(loader_module);
-    node->set_id(_loader_modules.size() - 1);
-    _root_nodes.push_back(node);
-    for (auto &output : outputs)
-        _tensor_map.insert(std::make_pair(output, node));
-
-    return node;
-}
-
 #ifdef ROCAL_AUDIO
 /*
  * Explicit specialization for AudioLoaderNode
@@ -501,3 +461,46 @@ template<> inline std::shared_ptr<AudioLoaderSingleShardNode> MasterGraph::add_n
     return node;
 }
 #endif
+
+/*
+ * Explicit specialization for NumpyLoaderNode
+ */
+template <>
+inline std::shared_ptr<NumpyLoaderNode> MasterGraph::add_node(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs) {
+    // if (_loader_module)
+    //     THROW("A loader already exists, cannot have more than one loader")
+#if ENABLE_HIP || ENABLE_OPENCL
+    auto node = std::make_shared<NumpyLoaderNode>(outputs[0], (void *)_device.resources());
+#else
+    auto node = std::make_shared<NumpyLoaderNode>(outputs[0], nullptr);
+#endif
+    auto loader_module = node->get_loader_module();
+    loader_module->set_prefetch_queue_depth(_prefetch_queue_depth);
+    _loader_modules.emplace_back(loader_module);
+    node->set_id(_loader_modules.size() - 1);
+    _root_nodes.push_back(node);
+    for (auto &output : outputs)
+        _tensor_map.insert(std::make_pair(output, node));
+
+    return node;
+}
+
+template <>
+inline std::shared_ptr<NumpyLoaderSingleShardNode> MasterGraph::add_node(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs) {
+    // if (_loader_module)
+    //     THROW("A loader already exists, cannot have more than one loader")
+#if ENABLE_HIP || ENABLE_OPENCL
+    auto node = std::make_shared<NumpyLoaderSingleShardNode>(outputs[0], (void *)_device.resources());
+#else
+    auto node = std::make_shared<NumpyLoaderSingleShardNode>(outputs[0], nullptr);
+#endif
+    auto loader_module = node->get_loader_module();
+    loader_module->set_prefetch_queue_depth(_prefetch_queue_depth);
+    _loader_modules.emplace_back(loader_module);
+    node->set_id(_loader_modules.size() - 1);
+    _root_nodes.push_back(node);
+    for (auto &output : outputs)
+        _tensor_map.insert(std::make_pair(output, node));
+
+    return node;
+}

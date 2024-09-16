@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2019 - 2022 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -105,11 +105,6 @@ void NumpyLoader::set_output(Tensor *output_tensor) {
     _output_mem_size = ((_output_tensor->info().data_size() / 8) * 8 + 8);
 }
 
-void NumpyLoader::set_random_bbox_data_reader(std::shared_ptr<RandomBBoxCrop_MetaDataReader> randombboxcrop_meta_data_reader) {
-    _randombboxcrop_meta_data_reader = randombboxcrop_meta_data_reader;
-    _circ_buff.random_bbox_crop_flag = true;
-}
-
 void NumpyLoader::stop_internal_thread() {
     _internal_thread_running = false;
     _stopped = true;
@@ -139,7 +134,6 @@ void NumpyLoader::initialize(ReaderConfig reader_cfg, DecoderConfig decoder_cfg,
         throw;
     }
     _decoded_data_info._data_names.resize(_batch_size);
-    _crop_image_info._crop_image_coords.resize(_batch_size);
     _tensor_roi.resize(_batch_size);
     _circ_buff.init(_mem_type, _output_mem_size, _prefetch_queue_depth);
     _is_initialized = true;
@@ -220,6 +214,11 @@ NumpyLoader::load_routine() {
 bool NumpyLoader::is_out_of_data() {
     return (remaining_count() < _batch_size);
 }
+
+size_t NumpyLoader::last_batch_padded_size() {
+    return _reader->last_batch_padded_size();
+}
+
 LoaderModuleStatus
 NumpyLoader::update_output_image() {
     LoaderModuleStatus status = LoaderModuleStatus::OK;
@@ -247,13 +246,8 @@ NumpyLoader::update_output_image() {
         return LoaderModuleStatus::OK;
 
     _output_decoded_data_info = _circ_buff.get_decoded_data_info();
-    if (_randombboxcrop_meta_data_reader) {
-        _output_cropped_img_info = _circ_buff.get_cropped_image_info();
-    }
     _output_names = _output_decoded_data_info._data_names;
     _output_tensor->update_tensor_roi(_tensor_roi);
-    // _output_tensor->update_tensor_roi(_output_decoded_data_info._roi_width, _output_decoded_data_info._roi_height);
-    // _output_tensor->update_tensor_orig_roi(_output_decoded_data_info._original_width, _output_decoded_data_info._original_height);
     _circ_buff.pop();
     if (!_loop)
         _remaining_image_count -= _batch_size;
@@ -299,8 +293,4 @@ std::vector<std::string> NumpyLoader::get_id() {
 
 DecodedDataInfo NumpyLoader::get_decode_data_info() {
     return _output_decoded_data_info;
-}
-
-CropImageInfo NumpyLoader::get_crop_image_info() {
-    return _output_cropped_img_info;
 }
