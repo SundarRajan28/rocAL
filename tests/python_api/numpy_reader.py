@@ -86,7 +86,7 @@ def main():
 
     pipeline.build()
 
-    val_pipeline = Pipeline(batch_size=1, num_threads=8, device_id=device_id, seed=device_id, rocal_cpu=rocal_cpu, prefetch_queue_depth=6, output_memory_type = types.DEVICE_MEMORY)
+    val_pipeline = Pipeline(batch_size=1, num_threads=8, device_id=device_id, seed=device_id, rocal_cpu=rocal_cpu, prefetch_queue_depth=2, output_memory_type = types.DEVICE_MEMORY)
 
     with val_pipeline:
         numpy_reader_output = fn.readers.numpy(file_root=data_path, files=x_val, shard_id=local_rank, num_shards=world_size)

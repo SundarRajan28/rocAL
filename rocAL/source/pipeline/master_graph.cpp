@@ -1024,13 +1024,14 @@ void MasterGraph::output_routine() {
             }
             if(_is_random_object_bbox) { update_random_object_bbox(); }
             if(_is_roi_random_crop) { update_roi_random_crop(); }
+            auto write_roi_buffers = write_buffers.second;   // Obtain ROI buffers from ring buffer
+            for (size_t idx = 0; idx < _internal_tensor_list.size(); idx++)
+                _internal_tensor_list[idx]->copy_roi(write_roi_buffers[idx]);   // Copy ROI from internal tensor's buffer to ring buffer
+
             _process_time.start();
             _graph->process();
             _process_time.end();
 
-            auto write_roi_buffers = write_buffers.second;   // Obtain ROI buffers from ring buffer
-            for (size_t idx = 0; idx < _internal_tensor_list.size(); idx++)
-                _internal_tensor_list[idx]->copy_roi(write_roi_buffers[idx]);   // Copy ROI from internal tensor's buffer to ring buffer
             _bencode_time.start();
             if (_is_box_encoder) {
                 auto bbox_encode_write_buffers = _ring_buffer.get_box_encode_write_buffers();
@@ -1133,15 +1134,15 @@ void MasterGraph::output_routine_multiple_loaders() {
             }*/
             if(_is_random_object_bbox) { update_random_object_bbox(); }
             if(_is_roi_random_crop) { update_roi_random_crop(); }
+            auto write_roi_buffers = write_buffers.second;   // Obtain ROI buffers from ring buffer
+            for (size_t idx = 0; idx < _internal_tensor_list.size(); idx++)
+                _internal_tensor_list[idx]->copy_roi(write_roi_buffers[idx]);   // Copy ROI from internal tensor's buffer to ring buffer
+
             _process_time.start();
             for (auto& graph : _graphs) {
                 graph->process();
             }
             _process_time.end();
-
-            auto write_roi_buffers = write_buffers.second;   // Obtain ROI buffers from ring buffer
-            for (size_t idx = 0; idx < _internal_tensor_list.size(); idx++)
-                _internal_tensor_list[idx]->copy_roi(write_roi_buffers[idx]);   // Copy ROI from internal tensor's buffer to ring buffer
 
             /*_bencode_time.start();
             if (_is_box_encoder) {
