@@ -54,10 +54,8 @@ unsigned NumpyDataReader::count_items() {
         // Formula used to calculate - [_last_batch_padded_size = _batch_size - (_shard_size % _batch_size) ]
         // Since "size" doesnt involve padding - we add the count of padded samples to the number of remaining elements
         // which equals to the shard size with padding
-        if (_last_batch_info.last_batch_policy == RocalBatchPolicy::PARTIAL || _last_batch_info.last_batch_policy == RocalBatchPolicy::FILL) {
-            ret += _last_batch_padded_size;
-        } else if (_last_batch_info.last_batch_policy == RocalBatchPolicy::DROP &&
-                   _last_batch_info.pad_last_batch_repeated == true) {  // When pad_last_batch_repeated is False - Enough
+        if (_last_batch_info.last_batch_policy == RocalBatchPolicy::DROP &&
+                   _last_batch_padded_size != 0) {  // When pad_last_batch_repeated is False - Enough
                                                        // number of samples would not be present in the last batch - hence
                                                        // dropped by condition handled in the loader
             ret -= _batch_size;
@@ -69,7 +67,8 @@ unsigned NumpyDataReader::count_items() {
             return largest_shard_size_with_padding;
         int size = std::max(largest_shard_size_with_padding, _batch_size);
         ret = (size - _read_counter);
-        if (_last_batch_info.last_batch_policy == RocalBatchPolicy::DROP)  // The shard size is padded at the beginning of the condition, hence dropping the last batch
+        if (_last_batch_info.last_batch_policy == RocalBatchPolicy::DROP &&
+                   _last_batch_padded_size != 0)  // The shard size is padded at the beginning of the condition, hence dropping the last batch
             ret -= _batch_size;
     }
     return ((ret < 0) ? 0 : ret);
@@ -563,7 +562,7 @@ Reader::Status NumpyDataReader::generate_file_names() {
     auto dataset_size = _file_count_all_shards;
     // Pad the _file_names with last element of the shard in the vector when _pad_last_batch_repeated is True
     _padded_samples = ((_shard_size > 0) ? _shard_size : largest_shard_size_without_padding()) % _batch_size;
-    _last_batch_padded_size = (_batch_size > 1) ? (_batch_size - _padded_samples) : 0;
+    _last_batch_padded_size = ((_batch_size > 1) && (_padded_samples > 0 )) ? (_batch_size - _padded_samples) : 0;
 
     if (_pad_last_batch_repeated == true) {
                                             // pad the last sample when the dataset_size is not divisible by
