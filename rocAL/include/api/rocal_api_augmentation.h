@@ -1223,6 +1223,20 @@ extern "C" RocalTensor ROCAL_API_CALL rocalTensorMulScalar(RocalContext p_contex
                                                            float scalar = 0.0,
                                                            RocalTensorOutputType output_datatype = ROCAL_FP32);
 
+/*! \brief Adds a tensor and a scalar and returns the output
+ * \param [in] p_context Rocal context
+ * \param [in] p_input Input Rocal tensor
+ * \param [in] is_output Is the output tensor part of the graph output
+ * \param [in] scalar The scalar value to be multiplied with the input tensor
+ * \param [in] output_datatype the data type of the output tensor
+ * \return RocalTensor
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalTensorAddScalar(RocalContext p_context,
+                                                           RocalTensor p_input,
+                                                           bool is_output,
+                                                           float scalar = 0.0,
+                                                           RocalTensorOutputType output_datatype = ROCAL_FP32);                                                           
+
 /*! \brief Adds two tensors and returns the output.
  * \param [in] p_context Rocal context
  * \param [in] p_input1 Input Rocal tensor1

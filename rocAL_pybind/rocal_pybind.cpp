@@ -185,6 +185,17 @@ PYBIND11_MODULE(rocal_pybind, m) {
                 )code",
             py::return_value_policy::reference)
         .def(
+            "__add__",
+            [](rocalTensor *output_tensor, float scalar) {
+                py::object fn_module = py::module::import("amd.rocal.fn");
+                auto fn_call = fn_module.attr("tensor_add_scalar_float")(output_tensor, "scalar"_a = scalar).cast<RocalTensor>();
+                return fn_call;
+            },
+            R"code(
+                Adds a node for arithmetic operation
+                )code",
+            py::return_value_policy::reference)
+        .def(
             "__mul__",
             [](rocalTensor *output_tensor, float scalar) {
                 py::object fn_module = py::module::import("amd.rocal.fn");
@@ -799,6 +810,8 @@ PYBIND11_MODULE(rocal_pybind, m) {
     m.def("uniformDistribution", &rocalUniformDistribution,
           py::return_value_policy::reference);
     m.def("tensorMulScalar", &rocalTensorMulScalar,
+          py::return_value_policy::reference);
+    m.def("tensorAddScalar", &rocalTensorAddScalar,
           py::return_value_policy::reference);
     m.def("tensorAddTensor", &rocalTensorAddTensor,
           py::return_value_policy::reference);

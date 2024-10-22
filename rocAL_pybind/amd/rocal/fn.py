@@ -1152,6 +1152,14 @@ def tensor_mul_scalar_float(*inputs, scalar=1.0, output_datatype=types.FLOAT):
     tensor_mul_scalar_float = b.tensorMulScalar(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
     return tensor_mul_scalar_float
 
+def tensor_add_scalar_float(*inputs, scalar=1.0, output_datatype=types.FLOAT):
+    """
+    Adds a rocalTensor with a scalar float value.
+    """
+    kwargs_pybind = {"input_audio": inputs[0], "is_output": False, "scalar": scalar, "output_datatype": output_datatype}
+    tensor_add_scalar_float = b.tensorAddScalar(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
+    return tensor_add_scalar_float
+
 def nonsilent_region(*inputs, cutoff_db = -60, reference_power = 0.0, reset_interval = 8192, window_length = 2048):
     """
     Performs leading and trailing silence detection in an audio buffer.
