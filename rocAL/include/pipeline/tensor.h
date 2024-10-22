@@ -196,8 +196,14 @@ class TensorInfo {
             get_modified_dims_from_layout(_layout, layout, new_dims);
             _dims = new_dims;
             modify_strides();
+            _max_shape.assign(_dims.begin() + 1, _dims.end());
         }
         _layout = layout;
+        if (_layout == RocalTensorlayout::NHWC) {
+            _channels = _dims.back();
+        } else if (_layout == RocalTensorlayout::NCHW) {
+            _channels = _dims.at(1);
+        }
     }
     void set_dims(std::vector<size_t>& new_dims) {
         if (_num_of_dims == new_dims.size()) {
@@ -350,6 +356,7 @@ class Tensor : public rocalTensor {
     int create_virtual(vx_context context, vx_graph graph);
     bool is_handle_set() { return (_vx_handle != 0); }
     void set_dims(std::vector<size_t> dims) override { _info.set_dims(dims); }
+    void set_layout(RocalTensorlayout layout) { _info.set_tensor_layout(layout); }
     unsigned num_of_dims() override { return _info.num_of_dims(); }
     unsigned batch_size() override { return _info.batch_size(); }
     std::vector<size_t> dims() override { return _info.dims(); }

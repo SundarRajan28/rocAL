@@ -153,6 +153,7 @@ std::unordered_map<int, std::string> rocalToPybindOutputDtype = {
     {3, "int8"},
     {4, "uint32"},
     {5, "int32"},
+    {6, "int16"},
 };
 
 PYBIND11_MODULE(rocal_pybind, m) {
@@ -700,7 +701,13 @@ PYBIND11_MODULE(rocal_pybind, m) {
             py::return_value_policy::reference);
     m.def("audioDecoder", &rocalAudioFileSource, "Reads file from the source given and decodes it",
             py::return_value_policy::reference);
+    m.def("numpyReaderSource", &rocalNumpyFileSource, "Reads data from numpy files",
+          py::return_value_policy::reference);
+    m.def("numpyReaderSourceShard", &rocalNumpyFileSourceSingleShard, "Reads data from numpy files according to the shard id and number of shards",
+          py::return_value_policy::reference);
     m.def("rocalResetLoaders", &rocalResetLoaders);
+    m.def("setLayout", &rocalSetLayout,
+          py::return_value_policy::reference);
     m.def("videoMetaDataReader", &rocalCreateVideoLabelReader, py::return_value_policy::reference);
     // rocal_api_augmentation.h
     m.def("ssdRandomCrop", &rocalSSDRandomCrop,
