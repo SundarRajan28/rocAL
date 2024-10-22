@@ -143,7 +143,9 @@ std::unordered_map<int, std::string> rocalToPybindLayout = {
     {3, "NFCHW"},
     {4, "NHW"},
     {5, "NFT"},
-    {6, "NTF"}
+    {6, "NTF"},
+    {7, "NDHWC"},
+    {8, "NCDHW"}
 };
 
 std::unordered_map<int, std::string> rocalToPybindOutputDtype = {
@@ -419,6 +421,8 @@ PYBIND11_MODULE(rocal_pybind, m) {
         .value("NHW", ROCAL_NHW)
         .value("NFT", ROCAL_NFT)
         .value("NTF", ROCAL_NTF)
+        .value("NDHWC", ROCAL_NDHWC)
+        .value("NCDHW", ROCAL_NCDHW)
         .export_values();
     py::enum_<RocalDecodeDevice>(types_m, "RocalDecodeDevice", "Decode device type")
         .value("HARDWARE_DECODE", ROCAL_HW_DECODE)
