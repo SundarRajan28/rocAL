@@ -258,6 +258,26 @@ void MasterGraph::create_single_graph() {
     _graph->verify();
 }
 
+void MasterGraph::create_multiple_graphs() {
+    // Actual graph creating and calls into adding nodes to graph is deferred and is happening here to enable potential future optimizations
+    int num_of_graphs = _loader_modules.size();
+    for (int n = 0; n < num_of_graphs; n++) {
+        _graphs.emplace_back(std::make_shared<Graph>(_context, _affinity, 0, _cpu_num_threads, _gpu_id));
+    }
+    for (auto &node : _nodes) {
+        // Any tensor not yet created can be created as virtual tensor
+        for (auto &tensor : node->output())
+            if (tensor->info().type() == TensorInfo::Type::UNKNOWN) {
+                tensor->create_virtual(_context, _graphs[node->get_id()]->get());
+                _internal_tensors.push_back(tensor);
+            }
+        node->create(_graphs[node->get_id()]);
+    }
+    
+    for (auto& graph : _graphs)
+        graph->verify();
+}
+
 MasterGraph::Status
 MasterGraph::build() {
     if (_internal_tensor_list.empty())
@@ -269,7 +289,12 @@ MasterGraph::build() {
     _ring_buffer.init(_mem_type, nullptr, _internal_tensor_list.data_size(), _internal_tensor_list.roi_size());
 #endif
     if (_is_box_encoder) _ring_buffer.initBoxEncoderMetaData(_mem_type, _user_batch_size * _num_anchors * 4 * sizeof(float), _user_batch_size * _num_anchors * sizeof(int));
-    create_single_graph();
+    if (_loader_modules.size() > 1) {
+        create_multiple_graphs();
+    } else {
+        _loader_module = _loader_modules[0];
+        create_single_graph();
+    }
     start_processing();
     return Status::OK;
 }
@@ -325,7 +350,8 @@ void MasterGraph::release() {
     _tensor_map.clear();
     _ring_buffer.release_gpu_res();
     // shut_down loader:: required for releasing any allocated resourses
-    _loader_module->shut_down();
+    for (auto loader_module : _loader_modules)
+        loader_module->shut_down();
     // release output buffer if allocated
     if (_output_tensor_buffer != nullptr) {
 #if ENABLE_OPENCL
@@ -350,6 +376,10 @@ void MasterGraph::release() {
 
     if (_graph != nullptr)
         _graph->release();
+    for (auto& graph : _graphs) {
+        if (graph != nullptr)
+            graph->release();
+    }
     if (_meta_data_reader != nullptr)
         _meta_data_reader->release();
 
@@ -417,7 +447,8 @@ MasterGraph::reset() {
     if (_randombboxcrop_meta_data_reader != nullptr)
         _randombboxcrop_meta_data_reader->release();
     // resetting loader module to start from the beginning of the media and clear it's internal state/buffers
-    _loader_module->reset();
+    for (auto loader_module : _loader_modules)
+        loader_module->reset();
     // restart processing of the images
     _first_run = true;
     _output_routine_finished_processing = false;
@@ -439,12 +470,20 @@ MasterGraph::mem_type() {
 
 size_t
 MasterGraph::last_batch_padded_size() {
-    return _loader_module->last_batch_padded_size();
+    size_t max_last_batch_padded_size = 0;
+    for (auto loader_module : _loader_modules)
+        max_last_batch_padded_size = (loader_module->last_batch_padded_size() > max_last_batch_padded_size) ? loader_module->last_batch_padded_size() : max_last_batch_padded_size;
+    return max_last_batch_padded_size;
 }
 
 Timing
 MasterGraph::timing() {
-    Timing t = _loader_module->timing();
+    Timing t;
+    for (auto loader_module : _loader_modules) {
+        Timing loader_time = loader_module->timing();
+        t.read_time = (t.read_time > loader_time.read_time) ? t.read_time : loader_time.read_time;
+        t.process_time += loader_time.process_time;
+    }
     t.process_time += _process_time.get_timing();
     t.copy_to_output += _convert_time.get_timing();
     t.bb_process_time += _bencode_time.get_timing();
@@ -884,6 +923,15 @@ MasterGraph::get_output_tensors() {
     return &_output_tensor_list;
 }
 
+bool MasterGraph::is_out_of_data() {
+    for (auto loader_module : _loader_modules) {
+        if (loader_module->remaining_count() < (_is_sequence_reader_output ? _sequence_batch_size : _user_batch_size)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void MasterGraph::output_routine() {
     INFO("Output routine started with " + TOSTR(_remaining_count) + " to load");
     try {
@@ -986,10 +1034,123 @@ void MasterGraph::output_routine() {
     }
 }
 
+void MasterGraph::output_routine_multiple_loaders() {
+    INFO("Output routine started with " + TOSTR(_remaining_count) + " to load");
+    try {
+        while (_processing) {
+            if (is_out_of_data()) {
+                // If the internal process routine ,output_routine(), has finished processing all the images, and last
+                // processed images stored in the _ring_buffer will be consumed by the user when it calls the run() func
+                notify_user_thread();
+                // the following call is required in case the ring buffer is waiting for more data to be loaded and there is no more data to process.
+                _ring_buffer.release_if_empty();
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                continue;
+            }
+            _rb_block_if_full_time.start();
+            // _ring_buffer.get_write_buffers() is blocking and blocks here until user uses processed image by calling run() and frees space in the ring_buffer
+            auto write_buffers = _ring_buffer.get_write_buffers();
+            auto write_output_buffers = write_buffers.first;
+            _rb_block_if_full_time.end();
+
+            // Swap handles on the input tensor, so that new tensor is loaded to be processed
+            for (auto loader_module : _loader_modules) {
+                auto load_ret = loader_module->load_next();
+                if (load_ret != LoaderModuleStatus::OK)
+                    THROW("Loader module failed to load next batch of images, status " + TOSTR(load_ret))                
+            }
+
+            if (!_processing)
+                break;
+            auto full_batch_image_names = _loader_modules[0]->get_id(); // Temp change
+            auto decode_image_info = _loader_modules[0]->get_decode_data_info();   // Temp change
+            auto crop_image_info = _loader_modules[0]->get_crop_image_info();   // Temp change
+
+            if (full_batch_image_names.size() != _user_batch_size)
+                WRN("Internal problem: names count " + TOSTR(full_batch_image_names.size()))
+            
+            /*
+            // meta_data lookup is done before _meta_data_graph->process() is called to have the new meta_data ready for processing
+            if (_meta_data_reader)
+                _meta_data_reader->lookup(full_batch_image_names);
+            */
+
+            if (!_processing)
+                break;
+
+            // Swap handles on the output tensor, so that new processed tensor will be written to the a new buffer
+            for (size_t idx = 0; idx < _internal_tensor_list.size(); idx++)
+                _internal_tensor_list[idx]->swap_handle(write_output_buffers[idx]);
+
+            if (!_processing)
+                break;
+
+            for (auto node : _nodes) {
+                if (node->_is_ssd) {
+                    node->set_meta_data(_augmented_meta_data);
+                }
+            }
+
+            update_node_parameters();
+            pMetaDataBatch output_meta_data = nullptr;
+            /* if (_augmented_meta_data) {
+                output_meta_data = _augmented_meta_data->clone(!_augmentation_metanode);  // copy the data if metadata is not processed by the nodes, else create an empty instance
+                if (_meta_data_graph) {
+                    if (_is_random_bbox_crop) {
+                        _meta_data_graph->update_random_bbox_meta_data(_augmented_meta_data, output_meta_data, decode_image_info, crop_image_info);
+                    } else {
+                        _meta_data_graph->update_meta_data(_augmented_meta_data, decode_image_info);
+                    }
+                    _meta_data_graph->process(_augmented_meta_data, output_meta_data);
+                }
+            }*/
+            auto write_roi_buffers = write_buffers.second;   // Obtain ROI buffers from ring buffer
+            for (size_t idx = 0; idx < _internal_tensor_list.size(); idx++)
+                _internal_tensor_list[idx]->copy_roi(write_roi_buffers[idx]);   // Copy ROI from internal tensor's buffer to ring buffer
+
+            _process_time.start();
+            for (auto& graph : _graphs) {
+                graph->process();
+            }
+            _process_time.end();
+
+            /*_bencode_time.start();
+            if (_is_box_encoder) {
+                auto bbox_encode_write_buffers = _ring_buffer.get_box_encode_write_buffers();
+#if ENABLE_HIP
+                if (_mem_type == RocalMemType::HIP) {
+                    // get bbox encoder read buffers
+                    if (_box_encoder_gpu) _box_encoder_gpu->Run(output_meta_data, (float *)bbox_encode_write_buffers.first, (int *)bbox_encode_write_buffers.second);
+                } else
+#endif
+                    _meta_data_graph->update_box_encoder_meta_data(&_anchors, output_meta_data, _criteria, _offset, _scale, _means, _stds, (float *)bbox_encode_write_buffers.first, (int *)bbox_encode_write_buffers.second);
+            }
+            _bencode_time.end();
+#ifdef ROCAL_VIDEO
+            // _sequence_start_framenum_vec.insert(_sequence_start_framenum_vec.begin(), _loader_module->get_sequence_start_frame_number());
+            // _sequence_frame_timestamps_vec.insert(_sequence_frame_timestamps_vec.begin(), _loader_module->get_sequence_frame_timestamps());
+#endif
+            */
+            _ring_buffer.set_meta_data(full_batch_image_names, output_meta_data);
+            _ring_buffer.push();  // Image data and metadata is now stored in output the ring_buffer, increases it's level by 1
+        }
+    } catch (const std::exception &e) {
+        ERR("Exception thrown in the process routine: " + STR(e.what()) + STR("\n"));
+        _processing = false;
+        _ring_buffer.release_all_blocked_calls();
+    }
+}
+
 void MasterGraph::start_processing() {
     _processing = true;
-    _remaining_count = _loader_module->remaining_count();
-    _output_thread = std::thread(&MasterGraph::output_routine, this);
+    for (auto loader_module : _loader_modules) {
+        _remaining_count = std::min(_remaining_count, static_cast<int>(loader_module->remaining_count()));
+    }
+    if (_loader_modules.size() == 1) {
+        _output_thread = std::thread(&MasterGraph::output_routine, this);
+    } else {
+        _output_thread = std::thread(&MasterGraph::output_routine_multiple_loaders, this);
+    }
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
 #else
 //  Changing thread scheduling policy and it's priority does not help on latest Ubuntu builds
