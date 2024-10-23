@@ -1156,7 +1156,7 @@ def tensor_add_scalar_float(*inputs, scalar=1.0, output_datatype=types.FLOAT):
     """
     Adds a rocalTensor with a scalar float value.
     """
-    kwargs_pybind = {"input_audio": inputs[0], "is_output": False, "scalar": scalar, "output_datatype": output_datatype}
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": False, "scalar": scalar, "output_datatype": output_datatype}
     tensor_add_scalar_float = b.tensorAddScalar(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
     return tensor_add_scalar_float
 
@@ -1220,3 +1220,11 @@ def set_layout(*inputs, output_layout=types.NHWC):
     new_output = b.setLayout(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (new_output)
+
+def log(*inputs, output_datatype = types.FLOAT):
+    """
+    Computes natural logarithm (base-e) of input.
+    """
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": False}
+    log_output = b.tensorLog(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
+    return log_output

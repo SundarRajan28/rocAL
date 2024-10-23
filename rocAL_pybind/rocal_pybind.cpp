@@ -815,6 +815,8 @@ PYBIND11_MODULE(rocal_pybind, m) {
           py::return_value_policy::reference);
     m.def("tensorAddTensor", &rocalTensorAddTensor,
           py::return_value_policy::reference);
+    m.def("tensorLog", &rocalTensorLog,
+          py::return_value_policy::reference);
     m.def("nonSilentRegionDetection", &rocalNonSilentRegionDetection,
           py::return_value_policy::reference);
     m.def("slice", &rocalSlice,

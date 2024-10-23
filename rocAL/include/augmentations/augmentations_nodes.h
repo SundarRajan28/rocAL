@@ -64,6 +64,7 @@ THE SOFTWARE.
 #include "augmentations/arithmetic_augmentations/node_tensor_mul_scalar.h"
 #include "augmentations/arithmetic_augmentations/node_tensor_add_scalar.h"
 #include "augmentations/arithmetic_augmentations/node_tensor_add_tensor.h"
+#include "augmentations/arithmetic_augmentations/node_tensor_log.h"
 #include "augmentations/audio_augmentations/node_non_silent_region_detection.h"
 #include "augmentations/geometry_augmentations/node_slice.h"
 #include "augmentations/effects_augmentations/node_normalize.h"
