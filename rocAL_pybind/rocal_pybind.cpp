@@ -390,6 +390,7 @@ PYBIND11_MODULE(rocal_pybind, m) {
         .value("FLOAT", ROCAL_FP32)
         .value("FLOAT16", ROCAL_FP16)
         .value("UINT8", ROCAL_UINT8)
+        .value("INT16", ROCAL_INT16)
         .export_values();
     py::enum_<RocalOutputMemType>(types_m, "RocalOutputMemType", "Output memory types")
         .value("HOST_MEMORY", ROCAL_MEMCPY_HOST)
@@ -824,6 +825,8 @@ PYBIND11_MODULE(rocal_pybind, m) {
     m.def("normalize", &rocalNormalize,
           py::return_value_policy::reference);
     m.def("melFilterBank", &rocalMelFilterBank,
+          py::return_value_policy::reference);
+    m.def("cast", &rocalCast,
           py::return_value_policy::reference);
 }
 }  // namespace rocal

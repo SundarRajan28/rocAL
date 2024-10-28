@@ -1228,3 +1228,11 @@ def log(*inputs, output_datatype = types.FLOAT):
     kwargs_pybind = {"input_tensor": inputs[0], "is_output": False}
     log_output = b.tensorLog(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
     return log_output
+
+def cast(*inputs, output_datatype = types.FLOAT):
+    """
+    Cast the input tensor to the output dtype.
+    """
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": False, "output_dtype": output_datatype}
+    log_output = b.cast(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
+    return log_output

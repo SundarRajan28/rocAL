@@ -17,8 +17,8 @@ def load_data(path, files_pattern):
     return data
 
 def get_data_split(path: str):
-    imgs = load_data(path, "*data.npy")
-    lbls = load_data(path, "*label.npy")
+    imgs = load_data(path, "*data*.npy")
+    lbls = load_data(path, "*label*.npy")
     assert len(imgs) == len(lbls), f"Found {len(imgs)} volumes but {len(lbls)} corresponding masks"
     return imgs, lbls
 
@@ -49,7 +49,10 @@ def main():
         numpy_reader_output = fn.readers.numpy(file_root=data_path, files=x_train, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
         label_output = fn.readers.numpy(file_root=data_path, files=y_train, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
         data_output = fn.set_layout(numpy_reader_output, output_layout=types.NDHWC)
-        pipeline.set_outputs(data_output, label_output)
+        f32_output = fn.cast(data_output, output_datatype=types.FLOAT)
+        add_output = f32_output + 1.0
+        log_add_output = fn.log(add_output)
+        pipeline.set_outputs(log_add_output, label_output)
 
     pipeline.build()
 
@@ -59,7 +62,10 @@ def main():
         numpy_reader_output = fn.readers.numpy(file_root=data_path1, files=x_val, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
         label_output = fn.readers.numpy(file_root=data_path1, files=y_val, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
         data_output = fn.set_layout(numpy_reader_output, output_layout=types.NDHWC)
-        val_pipeline.set_outputs(data_output, label_output)
+        f32_output = fn.cast(data_output, output_datatype=types.FLOAT)
+        add_output = f32_output + 1.0
+        log_add_output = fn.log(add_output)
+        val_pipeline.set_outputs(log_add_output, label_output)
 
     val_pipeline.build()
     
