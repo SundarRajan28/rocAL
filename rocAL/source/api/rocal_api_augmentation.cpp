@@ -2640,8 +2640,6 @@ RocalTensor ROCAL_API_CALL rocalCast(RocalContext p_context, RocalTensor p_input
     try {
         RocalTensorDataType op_tensor_datatype = static_cast<RocalTensorDataType>(output_datatype);
 
-        std::cerr << "input->info().data_type(): " << (int)input->info().data_type() << "\n";
-
         if (input->info().data_type() == op_tensor_datatype) {
         output = context->master_graph->create_tensor(input->info(), is_output);
             context->master_graph->add_node<CopyNode>({input}, {output});
@@ -2649,7 +2647,6 @@ RocalTensor ROCAL_API_CALL rocalCast(RocalContext p_context, RocalTensor p_input
             TensorInfo output_info = input->info();
             output_info.set_data_type(op_tensor_datatype);
             output = context->master_graph->create_tensor(output_info, is_output);
-            std::cerr << "output_info->info().data_type(): " << (int)output->info().data_type() << "\n";
             context->master_graph->add_node<CastNode>({input}, {output});
         }
     } catch(const std::exception& e) {
