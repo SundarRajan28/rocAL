@@ -32,6 +32,78 @@ try:
 except ImportError:
     CUPY_FOUND=False
 
+class ROCALNumpyIterator(object):
+    def __init__(self, pipeline, device="cpu", device_id=0, auto_reset=False):
+        self.loader = pipeline
+        self.device = device
+        self.device_id = device_id
+        self.output_memory_type = self.loader._output_memory_type
+        self.output_list = None
+        self.batch_size = self.loader._batch_size
+        self.len = b.getRemainingImages(self.loader._handle)
+        self.last_batch_policy = self.loader._last_batch_policy
+        self.last_batch_size = None
+        self.auto_reset = auto_reset
+        if self.device == "gpu" or self.device == "cuda":
+            if not CUPY_FOUND:
+                print('info: Import CuPy failed. Falling back to CPU!')
+                self.device = "cpu"
+
+    def next(self):
+        return self.__next__()
+
+    def __next__(self):
+        if self.loader.rocal_run() != 0:
+            if self.auto_reset:
+                self.reset()
+            raise StopIteration
+        self.output_tensor_list = self.loader.get_output_tensors()
+
+        if self.output_list is None:
+            # Output list used to store pipeline outputs - can support multiple augmentation outputs
+            self.output_list = []
+            for i in range(len(self.output_tensor_list)):
+                dimensions = self.output_tensor_list[i].dimensions()
+                if self.device == "cpu":
+                    self.dtype = self.output_tensor_list[i].dtype()
+                    output = np.empty(
+                        dimensions, dtype=self.dtype)
+                else:
+                    with cp.cuda.Device(device=self.device_id):
+                        self.dtype = self.output_tensor_list[i].dtype()
+                        output = cp.empty(dimensions, self.dtype)
+
+                if self.device == "cpu":
+                    self.output_tensor_list[i].copy_data(output)
+                else:
+                    self.output_tensor_list[i].copy_data(output.data.ptr)
+                self.output_list.append(output)
+        else:
+            for i in range(len(self.output_tensor_list)):
+                if self.device == "cpu":
+                    self.output_tensor_list[i].copy_data(self.output_list[i])
+                else:
+                    self.output_tensor_list[i].copy_data(
+                        self.output_list[i].data.ptr)
+        # Check if last batch policy is partial and only return the valid images in last batch
+        if (self.last_batch_policy is (types.LAST_BATCH_PARTIAL)) and b.getRemainingImages(self.loader._handle) < self.batch_size:
+            if (self.last_batch_size is None):
+                self.last_batch_size = self.batch_size - \
+                    b.getLastBatchPaddedSize(self.loader._handle)
+            return [inner_list[0:self.last_batch_size, :] for inner_list in self.output_list]
+        return self.output_list
+
+    def reset(self):
+        b.rocalResetLoaders(self.loader._handle)
+
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return self.len
+
+    def __del__(self):
+        b.rocalRelease(self.loader._handle)
 
 class ROCALGenericImageIterator(object):
     """!Generic iterator for rocAL pipelines that process images
