@@ -478,18 +478,23 @@ Reader::Status NumpyDataReader::generate_file_names() {
         for (unsigned file_count = 0; file_count < _files.size(); file_count++) {
             std::string file_path = _files[file_count];
             filesys::path pathObj(file_path);
-            if (filesys::exists(pathObj) && filesys::is_regular_file(pathObj)) {
-                // ignore files with extensions .tar, .zip, .7z
-                auto file_extension_idx = file_path.find_last_of(".");
-                if (file_extension_idx != std::string::npos) {
-                    std::string file_extension = file_path.substr(file_extension_idx + 1);
-                    std::transform(file_extension.begin(), file_extension.end(), file_extension.begin(),
-                                   [](unsigned char c) { return std::tolower(c); });
-                    if (file_extension != "npy")
-                        continue;
-                    else {
-                        _last_file_name = file_path;
-                        _file_names.push_back(file_path);
+            // ignore files with extensions .tar, .zip, .7z
+            auto file_extension_idx = file_path.find_last_of(".");
+            if (file_extension_idx != std::string::npos) {
+                std::string file_extension = file_path.substr(file_extension_idx + 1);
+                std::transform(file_extension.begin(), file_extension.end(), file_extension.begin(),
+                                [](unsigned char c) { return std::tolower(c); });
+                if (file_extension != "npy")
+                    continue;
+                else {
+                    if (filesys::path(file_path).is_relative()) {  // Only add root path if the file list contains relative file paths
+                        if (!filesys::exists(_folder_path))
+                            THROW("File list contains relative paths but root path doesn't exists");
+                        _absolute_file_path = _folder_path + "/" + file_path;
+                    }
+                    if (filesys::exists(_absolute_file_path) && filesys::is_regular_file(_absolute_file_path)) {
+                        _last_file_name = _absolute_file_path;
+                        _file_names.push_back(_absolute_file_path);
                         _file_count_all_shards++;
                     }
                 }
