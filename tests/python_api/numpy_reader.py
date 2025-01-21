@@ -2,9 +2,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import random
+import os
+import numpy as np
 
 from amd.rocal.pipeline import Pipeline
-from amd.rocal.plugin.generic import ROCALNumpyIterator
+from amd.rocal.plugin.pytorch import ROCALNumpyIterator
 import amd.rocal.fn as fn
 import amd.rocal.types as types
 import sys
@@ -49,9 +51,7 @@ def main():
         numpy_reader_output = fn.readers.numpy(file_root=data_path, files=x_train, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
         label_output = fn.readers.numpy(file_root=data_path, files=y_train, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
         data_output = fn.set_layout(numpy_reader_output, output_layout=types.NDHWC)
-        f32_output = fn.cast(data_output, output_datatype=types.FLOAT)
-        add_output = f32_output + 1.0
-        log_add_output = fn.log(add_output)
+        log_add_output = fn.log(data_output)
         pipeline.set_outputs(log_add_output, label_output)
 
     pipeline.build()
@@ -62,9 +62,7 @@ def main():
         numpy_reader_output = fn.readers.numpy(file_root=data_path1, files=x_val, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
         label_output = fn.readers.numpy(file_root=data_path1, files=y_val, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
         data_output = fn.set_layout(numpy_reader_output, output_layout=types.NDHWC)
-        f32_output = fn.cast(data_output, output_datatype=types.FLOAT)
-        add_output = f32_output + 1.0
-        log_add_output = fn.log(add_output)
+        log_add_output = fn.log(data_output)
         val_pipeline.set_outputs(log_add_output, label_output)
 
     val_pipeline.build()
@@ -73,14 +71,15 @@ def main():
     print(len(numpyIteratorPipeline))
     valNumpyIteratorPipeline = ROCALNumpyIterator(val_pipeline, device='cpu' if rocal_cpu else 'gpu', device_id=device_id)
     print(len(valNumpyIteratorPipeline))
+
     for epoch in range(1):
         print("+++++++++++++++++++++++++++++EPOCH+++++++++++++++++++++++++++++++++++++",epoch)
         for i , it in enumerate(numpyIteratorPipeline):
-            print(i, it[0].shape, it[1].shape)
+            print(i, it[0].shape, it[1].shape, np.allclose(it[0][0].cpu(), np.log1p(np.load(x_train[i])).astype(np.float32)))
             print("************************************** i *************************************",i)
         numpyIteratorPipeline.reset()
         for i , it in enumerate(valNumpyIteratorPipeline):
-            print(i, it[0].shape, it[1].shape)
+            print(i, it[0].shape, it[1].shape, np.allclose(it[0][0].cpu(), np.log1p(np.load(x_val[i])).astype(np.float32)))
             print("************************************** i *************************************",i)
         valNumpyIteratorPipeline.reset()
     print("*********************************************************************")

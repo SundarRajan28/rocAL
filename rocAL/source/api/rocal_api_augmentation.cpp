@@ -2613,7 +2613,7 @@ RocalTensor rocalTensorLog(RocalContext p_context,
     auto input = static_cast<Tensor*>(p_input);
     try {
         RocalTensorDataType op_tensor_data_type = static_cast<RocalTensorDataType>(input->data_type());
-        if ((op_tensor_data_type != RocalTensorDataType::INT8) || (op_tensor_data_type != RocalTensorDataType::UINT8)) {
+        if ((op_tensor_data_type != RocalTensorDataType::INT8) || (op_tensor_data_type != RocalTensorDataType::UINT8) || (op_tensor_data_type != RocalTensorDataType::INT16)) {
             op_tensor_data_type = RocalTensorDataType::FP32;
         }
         TensorInfo output_info = input->info();
