@@ -153,7 +153,14 @@ LoaderModuleStatus
 NumpyLoader::load_routine() {
     LOG("Started the internal loader thread");
     LoaderModuleStatus last_load_status = LoaderModuleStatus::OK;
-    // Initially record number of all the images that are going to be loaded, this is used to know how many still there
+    // Initially record number of all the numpy arrays that are going to be loaded, this is used to know how many still there
+    auto max_shape = _output_tensor->info().max_shape();
+    auto num_dims = max_shape.size();
+    std::vector<unsigned> strides_in_dims(num_dims + 1);
+    strides_in_dims[num_dims] = 1;
+    for (int i = num_dims - 1; i >= 0; i--) {
+        strides_in_dims[i] = strides_in_dims[i + 1] * max_shape[i];
+    }
 
     while (_internal_thread_running) {
         auto data = _circ_buff.get_write_buffer();
@@ -167,13 +174,12 @@ NumpyLoader::load_routine() {
 
             while ((file_counter != _batch_size) && _reader->count_items() > 0) {
                 auto read_ptr = data + _image_size * file_counter;
-                auto max_shape = _output_tensor->info().max_shape();
-                size_t readSize = _reader->open();
-                if (readSize == 0) {
+                size_t read_size = _reader->open();
+                if (read_size == 0) {
                     WRN("Opened file " + _reader->id() + " of size 0");
                     continue;
                 }
-                auto fsize = _reader->read_numpy_data(read_ptr, readSize, max_shape);
+                auto fsize = _reader->read_numpy_data(read_ptr, read_size, strides_in_dims);
                 if (fsize == 0)
                     THROW("Numpy arrays must contain readable data")
                 _decoded_data_info._data_names[file_counter] = _reader->id();
