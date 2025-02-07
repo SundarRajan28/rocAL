@@ -1101,13 +1101,15 @@ void MasterGraph::output_routine_multiple_loaders() {
                 output_meta_data = _augmented_meta_data->clone(!_augmentation_metanode);  // copy the data if metadata is not processed by the nodes, else create an empty instance
                 if (_meta_data_graph) {
                     if (_is_random_bbox_crop) {
-                        _meta_data_graph->update_random_bbox_meta_data(_augmented_meta_data, output_meta_data, decode_image_info, CropImageInfo);
+                        _meta_data_graph->update_random_bbox_meta_data(_augmented_meta_data, output_meta_data, decode_image_info, crop_image_info);
                     } else {
                         _meta_data_graph->update_meta_data(_augmented_meta_data, decode_image_info);
                     }
                     _meta_data_graph->process(_augmented_meta_data, output_meta_data);
                 }
             }*/
+            
+
             _process_time.start();
             for (auto& graph : _graphs) {
                 graph->process();

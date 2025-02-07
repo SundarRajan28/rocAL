@@ -984,4 +984,12 @@ extern "C" RocalTensor ROCAL_API_CALL rocalAudioFileSourceSingleShard(RocalConte
                                                                       unsigned max_decoded_channels = 0,
                                                                       RocalShardingInfo rocal_sharding_info = RocalShardingInfo());
 
+/*! Sets input layout for the input tensor. Used for readers like numpy where layout is passed from user and not known during reading.
+ * \param [in] context Rocal context
+ * \param [in] p_input Input Rocal tensor
+ * \param [in] output_layout the layout to be set for the input tensor
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalSetLayout(RocalContext p_context,
+                                                     RocalTensor p_input,
+                                                     RocalTensorLayout output_layout);
 #endif  // MIVISIONX_ROCAL_API_DATA_LOADERS_H

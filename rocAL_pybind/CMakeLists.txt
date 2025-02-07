@@ -19,12 +19,11 @@
 # THE SOFTWARE.
 
 cmake_minimum_required(VERSION 3.5)
-set(VERSION "2.0.0")
 
 # Set Project Version and Language
-project(rocAL_pybind VERSION ${VERSION} LANGUAGES CXX)
+project(rocal_pybind VERSION ${VERSION} LANGUAGES CXX)
 
-set(TARGET_NAME rocAL_pybind)
+set(TARGET_NAME rocal_pybind)
 
 set(CMAKE_INSTALL_LIBDIR "lib" CACHE STRING "Library install directory")
 include(GNUInstallDirs)
@@ -189,7 +188,7 @@ if(NOT pybind11_FOUND)
     set(BUILD_ROCAL_PYBIND false)	
     message("-- ${Yellow}NOTE: rocAL requires pybind11, Not Found${ColourReset}")	
 endif()
-# PyBind11
+# Half
 if(NOT HALF_FOUND)	
     set(BUILD_ROCAL_PYBIND false)	
     message("-- ${Yellow}NOTE: rocAL requires Half, Not Found${ColourReset}")	
@@ -231,6 +230,16 @@ if(${BUILD_ROCAL_PYBIND})
     add_dependencies(rocal_pybind rocal)
     message("-- ${White}rocal_pybind -- Link Libraries: ${LINK_LIBRARY_LIST}${ColourReset}")
     message("-- ${White}rocal_pybind -- CMAKE_CXX_FLAGS:${CMAKE_CXX_FLAGS}${ColourReset}")
+
+    #DLPack
+    find_package(DLPACK QUIET)
+    if(DLPACK_FOUND)
+        include_directories(${DLPACK_INCLUDE_DIRS})
+        target_compile_definitions(rocal_pybind PUBLIC ENABLE_DLPACK=1)
+    else()
+        target_compile_definitions(rocal_pybind PUBLIC ENABLE_DLPACK=0)
+        message("-- ${Yellow}NOTE: DLPack Not Found - rocAL Tensorflow and Generic plugins built without GPU support!${ColourReset}")
+    endif()
 
     set_target_properties(rocal_pybind PROPERTIES
         PREFIX "${PYTHON_MODULE_PREFIX}"
@@ -280,8 +289,12 @@ if(${BUILD_ROCAL_PYBIND})
     add_dependencies(PyPackageInstall PyPackageBuild)
         
     #install rocAL pybind libs
-    install(FILES ${CMAKE_BINARY_DIR}/${TARGET_NAME}/${CMAKE_INSTALL_LIBDIR}/${TARGET_PYMODULE_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX_PYTHON} COMPONENT runtime)
+    install(FILES ${CMAKE_BINARY_DIR}/${TARGET_NAME}/${CMAKE_INSTALL_LIBDIR}/${TARGET_PYMODULE_NAME} DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT runtime)
+    install(DIRECTORY amd DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT runtime)
     message("-- ${Green}Radeon Augmentation Library Python Binding - rocal_pybind module added ${ColourReset}")
+
+    # PyBind Test - Installed
+    install(DIRECTORY ${CMAKE_SOURCE_DIR}/tests/pybind DESTINATION ${CMAKE_INSTALL_DATADIR}/rocal/test COMPONENT test)
 else()
     message("-- ${Red}WARNING: rocAL PyBind Module excluded - Dependency Failure${ColourReset}")
 endif()

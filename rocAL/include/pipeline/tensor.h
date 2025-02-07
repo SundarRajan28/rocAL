@@ -137,8 +137,9 @@ class TensorInfo {
         if (_data_type == data_type)
             return;
         _data_type = data_type;
-        _data_size = (_data_size / _data_type_size);
-        _data_size *= data_type_size();
+        _data_type_size = tensor_data_size(_data_type);
+        modify_strides();
+        _data_size = _strides[0] * _dims[0];
     }
     void get_modified_dims_from_layout(RocalTensorlayout input_layout, RocalTensorlayout output_layout, std::vector<size_t>& new_dims) {
         std::vector<size_t> dims_mapping;
@@ -150,6 +151,10 @@ class TensorInfo {
             dims_mapping = {0, 1, 4, 2, 3};
         } else if (input_layout == RocalTensorlayout::NFCHW && output_layout == RocalTensorlayout::NFHWC) {
             dims_mapping = {0, 1, 3, 4, 2};
+        } else if (input_layout == RocalTensorlayout::NCDHW && output_layout == RocalTensorlayout::NDHWC) {
+            dims_mapping = {0, 2, 3, 4, 1};
+        } else if (input_layout == RocalTensorlayout::NDHWC && output_layout == RocalTensorlayout::NCDHW) {
+            dims_mapping = {0, 4, 1, 2, 3};
         } else {
             THROW("Invalid layout conversion")
         }
@@ -163,6 +168,14 @@ class TensorInfo {
             if (_layout == RocalTensorlayout::NHW || _layout == RocalTensorlayout::NFT || _layout == RocalTensorlayout::NTF) {   // For Audio/2D layouts
                 _max_shape[0] = _dims.at(1);
                 _max_shape[1] = _dims.at(2);
+            } else if (_layout == RocalTensorlayout::NDHWC) {
+                _max_shape.resize(4);
+                _max_shape.assign(_dims.begin() + 1, _dims.end());
+                _channels = _dims.at(4);
+            } else if (_layout == RocalTensorlayout::NCDHW) {
+                _max_shape.resize(4);
+                _max_shape.assign(_dims.begin() + 1, _dims.end());
+                _channels = _dims.at(1);
             } else {            // For Image layouts
                 _is_image = true;
                 if (_layout == RocalTensorlayout::NHWC) {
@@ -244,11 +257,18 @@ class TensorInfo {
     }
     void modify_dims(RocalTensorlayout layout, std::vector<int> new_dims) {
         switch (_layout) {
-            case RocalTensorlayout::NHWC:
-            case RocalTensorlayout::NCHW: {
+            case RocalTensorlayout::NDHWC: {
                 _max_shape[0] = _dims[1] = new_dims[0];
                 _max_shape[1] = _dims[2] = new_dims[1];
                 _max_shape[2] = _dims[3] = new_dims[2];
+                _max_shape[3] = _dims[4] = new_dims[3];
+                break;
+            }
+            case RocalTensorlayout::NCDHW: {
+                _max_shape[0] = _dims[1] = new_dims[0];
+                _max_shape[1] = _dims[2] = new_dims[1];
+                _max_shape[2] = _dims[3] = new_dims[2];
+                _max_shape[3] = _dims[4] = new_dims[3];
                 break;
             }
             default: {
@@ -374,14 +394,16 @@ class Tensor : public rocalTensor {
     int create_from_ptr(vx_context context, void *ptr);
     int create_virtual(vx_context context, vx_graph graph);
     bool is_handle_set() { return (_vx_handle != 0); }
-    void set_layout(RocalTensorlayout layout) { _info.set_tensor_layout(layout); }
     void set_dims(std::vector<size_t> dims) override { _info.set_dims(dims); }
+    void set_layout(RocalTensorlayout layout) { _info.set_tensor_layout(layout); }
     unsigned num_of_dims() override { return _info.num_of_dims(); }
     unsigned batch_size() override { return _info.batch_size(); }
     std::vector<size_t> dims() override { return _info.dims(); }
     std::vector<size_t> strides() override { return _info.strides(); }
     RocalTensorLayout layout() override { return (RocalTensorLayout)_info.layout(); }
+    void set_tensor_layout(RocalTensorLayout layout) override { _info.set_tensor_layout((RocalTensorlayout)layout); }
     RocalTensorOutputType data_type() override { return (RocalTensorOutputType)_info.data_type(); }
+    RocalOutputMemType mem_type() override { return (_info.mem_type() == RocalMemType::HOST ? ROCAL_MEMCPY_HOST : ROCAL_MEMCPY_GPU); }
     size_t data_size() override { return _info.data_size(); }
     RocalROICordsType roi_type() override { return (RocalROICordsType)_info.roi_type(); }
     std::vector<size_t> shape() override { return _info.max_shape(); }
@@ -389,6 +411,7 @@ class Tensor : public rocalTensor {
     RocalTensorBackend backend() override {
         return (_info.mem_type() == RocalMemType::HOST ? ROCAL_CPU : ROCAL_GPU);
     }
+    uint64_t data_type_size() override { return _info.data_type_size(); }
 
    private:
     vx_tensor _vx_handle = nullptr;  //!< The OpenVX tensor

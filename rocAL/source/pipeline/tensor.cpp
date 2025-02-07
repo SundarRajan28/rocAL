@@ -29,7 +29,6 @@ THE SOFTWARE.
 
 #include <cstring>
 #include <stdexcept>
-
 #include "pipeline/commons.h"
 #include "pipeline/tensor.h"
 
@@ -63,6 +62,8 @@ vx_size tensor_data_size(RocalTensorDataType data_type) {
             return sizeof(vx_uint32);
         case RocalTensorDataType::INT32:
             return sizeof(vx_int32);
+        case RocalTensorDataType::INT16:
+            return sizeof(vx_int16);
         default:
             throw std::runtime_error("tensor data_type not valid");
     }
@@ -81,6 +82,8 @@ vx_enum interpret_tensor_data_type(RocalTensorDataType data_type) {
             return VX_TYPE_UINT32;
         case RocalTensorDataType::INT32:
             return VX_TYPE_INT32;
+        case RocalTensorDataType::INT16:
+            return VX_TYPE_INT16;
         default:
             THROW("Unsupported Tensor type " + TOSTR(data_type))
     }
@@ -439,14 +442,13 @@ unsigned Tensor::copy_data(hipStream_t stream, void *host_memory, bool sync) {
 
 unsigned Tensor::copy_data(void *user_buffer, RocalOutputMemType external_mem_type) {
     if (_mem_handle == nullptr) return 0;
-
     if (external_mem_type == RocalOutputMemType::ROCAL_MEMCPY_GPU) {
 #if ENABLE_HIP
         if (_info._mem_type == RocalMemType::HIP) {
             // copy from device to device
             hipError_t status;
             if ((status = hipMemcpyDtoD((void *)user_buffer, _mem_handle, _info.data_size())))
-                THROW("copy_data::hipMemcpyDtoD failed: " + TOSTR(status))
+                THROW("copy_data::hipMemcpyDtoD failed: " + hipGetErrorName(status))
         } else if (_info._mem_type == RocalMemType::HOST) {
             // copy from host to device
             hipError_t status;

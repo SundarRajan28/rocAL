@@ -1719,6 +1719,7 @@ rocalNumpyFileSource(
             {3, RocalTensorDataType::INT8},
             {4, RocalTensorDataType::UINT32},
             {5, RocalTensorDataType::INT32},
+            {6, RocalTensorDataType::INT16},
         };
         tensor_data_type = data_type_map[max_dimensions.back()];
         max_dimensions.pop_back();
@@ -1782,6 +1783,7 @@ rocalNumpyFileSourceSingleShard(
             {3, RocalTensorDataType::INT8},
             {4, RocalTensorDataType::UINT32},
             {5, RocalTensorDataType::INT32},
+            {6, RocalTensorDataType::INT16},
         };
         auto dtype = max_dimensions.at(max_dimensions.size() - 1);
         max_dimensions.pop_back();
@@ -2447,4 +2449,27 @@ rocalResetLoaders(RocalContext p_context) {
         return ROCAL_RUNTIME_ERROR;
     }
     return ROCAL_OK;
+}
+
+RocalTensor ROCAL_API_CALL
+rocalSetLayout(
+    RocalContext p_context,
+    RocalTensor p_input,
+    RocalTensorLayout output_layout) {
+    Tensor* output = nullptr;
+    if ((p_context == nullptr) || (p_input == nullptr)) {
+        ERR("Invalid ROCAL context or invalid input tensor")
+        return output;
+    }
+
+    auto context = static_cast<Context*>(p_context);
+    auto input = static_cast<Tensor*>(p_input);
+    try {
+        RocalTensorlayout op_tensor_layout = static_cast<RocalTensorlayout>(output_layout);
+        input->set_layout(op_tensor_layout);
+    } catch (const std::exception& e) {
+        context->capture_error(e.what());
+        ERR(e.what())
+    }
+    return input;
 }

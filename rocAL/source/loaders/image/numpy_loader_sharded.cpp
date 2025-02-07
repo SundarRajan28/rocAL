@@ -155,7 +155,7 @@ Timing NumpyLoaderSharded::timing() {
 size_t NumpyLoaderSharded::last_batch_padded_size() {
     size_t last_batch_padded_size = 0;
     for (auto& loader : _loaders) {
-        if (last_batch_padded_size == 0)
+        if (!last_batch_padded_size)
             last_batch_padded_size = loader->last_batch_padded_size();
         if (last_batch_padded_size != loader->last_batch_padded_size())
             THROW("All loaders must have the same last batch padded size");

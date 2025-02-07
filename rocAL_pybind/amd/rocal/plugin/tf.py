@@ -26,12 +26,55 @@ import numpy as np
 import ctypes
 import rocal_pybind as b
 import amd.rocal.types as types
-try:
-    import cupy as cp
-    CUPY_FOUND=True
-except ImportError:
-    CUPY_FOUND=False
+import tensorflow as tf
 
+class ROCALNumpyIterator(object):
+    def __init__(self, pipeline, device="cpu", device_id=0, auto_reset=False):
+        self.loader = pipeline
+        self.device = device
+        self.device_id = device_id
+        self.output_memory_type = self.loader._output_memory_type
+        self.output_list = None
+        self.batch_size = self.loader._batch_size
+        self.len = b.getRemainingImages(self.loader._handle)
+        self.last_batch_policy = self.loader._last_batch_policy
+        self.last_batch_size = None
+        self.auto_reset = auto_reset
+
+    def next(self):
+        return self.__next__()
+
+    def __next__(self):
+        if self.loader.rocal_run() != 0:
+            if self.auto_reset:
+                self.reset()
+            raise StopIteration
+        self.output_tensor_list = self.loader.get_output_tensors()
+
+        # Output list used to store pipeline outputs - can support multiple augmentation outputs
+        self.output_list = []
+        for i in range(len(self.output_tensor_list)):
+            output = tf.experimental.dlpack.from_dlpack(self.output_tensor_list[i].__dlpack__(self.device_id))
+            self.output_list.append(output)
+        # Check if last batch policy is partial and only return the valid images in last batch
+        if (self.last_batch_policy is (types.LAST_BATCH_PARTIAL)) and b.getRemainingImages(self.loader._handle) < self.batch_size:
+            if (self.last_batch_size is None):
+                self.last_batch_size = self.batch_size - \
+                    b.getLastBatchPaddedSize(self.loader._handle)
+            return [inner_list[0:self.last_batch_size, :] for inner_list in self.output_list]
+        return self.output_list
+
+    def reset(self):
+        b.rocalResetLoaders(self.loader._handle)
+
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return self.len
+
+    def __del__(self):
+        b.rocalRelease(self.loader._handle)
 
 class ROCALGenericImageIterator(object):
     """!Generic iterator for rocAL pipelines that process images
@@ -96,10 +139,6 @@ class ROCALGenericIteratorDetection(object):
         self.multiplier = multiplier or [1.0, 1.0, 1.0]
         self.offset = offset or [0.0, 0.0, 0.0]
         self.device = device
-        if self.device is "gpu" or "cuda":
-            if not CUPY_FOUND:
-                print('info: Import CuPy failed. Falling back to CPU!')
-                self.device = "cpu"
         self.device_id = device_id
         self.reverse_channels = reverse_channels
         self.tensor_dtype = tensor_dtype
@@ -116,27 +155,13 @@ class ROCALGenericIteratorDetection(object):
         if self.loader.rocal_run() != 0:
             raise StopIteration
         self.output_tensor_list = self.loader.get_output_tensors()
-
         if self.output_list is None:
             # Output list used to store pipeline outputs - can support multiple augmentation outputs
             self.output_list = []
             for i in range(len(self.output_tensor_list)):
-                self.dimensions = self.output_tensor_list[i].dimensions()
-                self.dtype = self.output_tensor_list[i].dtype()
-                if self.device == "cpu":
-                    self.output = np.empty(self.dimensions, dtype=self.dtype)
-                    self.output_tensor_list[i].copy_data(self.output)
-                else:
-                    self.output = cp.empty(self.dimensions, dtype=self.dtype)
-                    self.output_tensor_list[i].copy_data(self.output.data.ptr)
+                # returns tf tensor on gpu/cpu 
+                self.output = tf.experimental.dlpack.from_dlpack(self.output_tensor_list[i].__dlpack__(self.device_id))
                 self.output_list.append(self.output)
-        else:
-            for i in range(len(self.output_tensor_list)):
-                if self.device == "cpu":
-                    self.output_tensor_list[i].copy_data(self.output_list[i])
-                else:
-                    self.output_tensor_list[i].copy_data(
-                        self.output_list[i].data.ptr)
 
         if self.loader._name == "TFRecordReaderDetection":
             self.bbox_list = []
@@ -192,13 +217,10 @@ class ROCALGenericIteratorDetection(object):
                     self.labels = np.reshape(
                         self.labels, (-1, self.bs, self.loader._num_classes))
                 else:
-                    self.labels = cp.zeros(
-                        (self.bs) * (self.loader._num_classes), dtype="int32")
-                    self.loader.get_one_hot_encoded_labels(
-                        self.labels.data.ptr, self.loader._output_memory_type)
-                    self.labels = cp.reshape(
-                        self.labels, (-1, self.bs, self.loader._num_classes))
-                    
+                    # TODO: one hot labels in dlpack? no support yet
+                    self.labels = np.zeros((self.bs) * (self.loader._num_classes), dtype="int32")
+                    self.loader.get_one_hot_encoded_labels(self.labels, self.loader._output_memory_type)
+                    self.labels = np.reshape(self.labels, (-1, self.bs, self.loader._num_classes))
             else:
                 self.labels = self.loader.get_image_labels()
 

@@ -1056,7 +1056,7 @@ def box_iou_matcher(*inputs, anchors, high_threshold=0.5,
     return (box_iou_matcher, [])
 
 
-def external_source(source, device=None, color_format=types.RGB, random_shuffle=False, mode=types.EXTSOURCE_FNAME, max_width=2000, max_height=2000, last_batch_policy=types.LAST_BATCH_FILL, last_batch_padded=True):
+def external_source(source, device=None, color_format=types.RGB, random_shuffle=False, mode=types.EXTSOURCE_FNAME, max_width=2000, max_height=2000, last_batch_policy=types.LAST_BATCH_FILL, pad_last_batch_repeated=False, stick_to_shard=True, shard_size=-1):
     """
     External Source Reader - User can pass a iterator or callable source.
     @param source (iterator or callable)                                 The source iterator or callable object.
@@ -1073,8 +1073,9 @@ def external_source(source, device=None, color_format=types.RGB, random_shuffle=
     Pipeline._current_pipeline._external_source_mode = mode
     Pipeline._current_pipeline._external_source_user_given_width = max_width
     Pipeline._current_pipeline._external_source_user_given_height = max_height
+    sharding_info = b.RocalShardingInfo(last_batch_policy, pad_last_batch_repeated, stick_to_shard, shard_size)
     kwargs_pybind = {"rocal_color_format": color_format, "is_output": False, "shuffle": random_shuffle, "loop": False, "decode_size_policy": types.USER_GIVEN_SIZE,
-                     "max_width": max_width, "max_height": max_height, "dec_type": types.DECODER_TJPEG, "external_source_mode": mode, "last_batch_info": (last_batch_policy, last_batch_padded)}
+                     "max_width": max_width, "max_height": max_height, "dec_type": types.DECODER_TJPEG, "external_source_mode": mode, "sharding_info": sharding_info}
     external_source_operator = b.externalFileSource(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (external_source_operator, [])  # Labels is Empty
@@ -1152,6 +1153,14 @@ def tensor_mul_scalar_float(*inputs, scalar=1.0, output_datatype=types.FLOAT):
     tensor_mul_scalar_float = b.tensorMulScalar(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
     return tensor_mul_scalar_float
 
+def tensor_add_scalar_float(*inputs, scalar=1.0, output_datatype=types.FLOAT):
+    """
+    Adds a rocalTensor with a scalar float value.
+    """
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": False, "scalar": scalar, "output_datatype": output_datatype}
+    tensor_add_scalar_float = b.tensorAddScalar(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
+    return tensor_add_scalar_float
+
 def nonsilent_region(*inputs, cutoff_db = -60, reference_power = 0.0, reset_interval = 8192, window_length = 2048):
     """
     Performs leading and trailing silence detection in an audio buffer.
@@ -1202,6 +1211,22 @@ def mel_filter_bank(*inputs, bytes_per_sample_hint = [0], freq_high = 0.0, freq_
                      "nfilter": nfilter, "normalize": normalize, "sample_rate": sample_rate, "output_datatype": output_datatype}
     mel_filter_bank_output = b.melFilterBank(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return mel_filter_bank_output
+
+def log(*inputs, output_datatype = types.FLOAT):
+    """
+    Computes natural logarithm (base-e) of input.
+    """
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": False}
+    log_output = b.tensorLog(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
+    return log_output
+
+def cast(*inputs, output_datatype = types.FLOAT):
+    """
+    Cast the input tensor to the output dtype.
+    """
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": False, "output_dtype": output_datatype}
+    log_output = b.cast(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
+    return log_output
 
 def set_layout(*inputs, output_layout=types.NHWC):
     """!Adjusts brightness of the image.

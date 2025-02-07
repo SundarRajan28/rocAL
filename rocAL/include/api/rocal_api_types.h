@@ -233,9 +233,15 @@ enum RocalTensorLayout {
      * Spectrogram Layout TF
      */
     ROCAL_NTF = 6,
+    /*! \brief AMD ROCAL_NDHWC
+     */
+    ROCAL_NDHWC = 7,
+    /*! \brief AMD ROCAL_NCDHW
+     */
+    ROCAL_NCDHW = 8,
     /*! \brief AMD ROCAL_NONE
      */
-    ROCAL_NONE = 7  // Layout for generic tensors (Non-Image or Non-Video)
+    ROCAL_NONE = 9  // Layout for generic tensors (Non-Image or Non-Video)
 };
 
 /*! \brief rocAL Tensor Output Type enum
@@ -259,7 +265,10 @@ enum RocalTensorOutputType {
     ROCAL_UINT32 = 4,
     /*! \brief AMD ROCAL_INT32
      */
-    ROCAL_INT32 = 5
+    ROCAL_INT32 = 5,
+    /*! \brief AMD ROCAL_INT16
+     */
+    ROCAL_INT16 = 6
 };
 
 /*! \brief rocAL Decoder Type enum
@@ -473,6 +482,18 @@ struct RocalShardingInfo {
           stick_to_shard(true),
           shard_size(-1)
     {}
+
+    // Constructor that initializes all members
+    RocalShardingInfo(
+        RocalLastBatchPolicy last_batch_policy,
+        bool pad_last_batch_repeated,
+        bool stick_to_shard,
+        int shard_size
+    )
+        : last_batch_policy(last_batch_policy),
+          pad_last_batch_repeated(pad_last_batch_repeated),
+          stick_to_shard(stick_to_shard),
+          shard_size(shard_size) {}
 };
 
 #endif  // MIVISIONX_ROCAL_API_TYPES_H
