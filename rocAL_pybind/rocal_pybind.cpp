@@ -148,7 +148,9 @@ std::unordered_map<int, std::string> rocalToPybindLayout = {
     {3, "NFCHW"},
     {4, "NHW"},
     {5, "NFT"},
-    {6, "NTF"}
+    {6, "NTF"},
+    {7, "NDHWC"},
+    {8, "NCDHW"}
 };
 
 std::unordered_map<int, std::string> rocalToPybindOutputDtype = {
@@ -203,6 +205,8 @@ std::unordered_map<int, std::string> rocalToPybindOutputDtype = {
             case 16:
                 if (dtype.code == kDLFloat) {
                     return RocalTensorOutputType::ROCAL_FP16;
+                } else if (dtype.code == kDLInt) {
+                    return RocalTensorOutputType::ROCAL_INT16;
                 } else {
                     throw std::runtime_error("Data type code for 16 bit type is not supported.");
                 }
@@ -265,6 +269,11 @@ std::unordered_map<int, std::string> rocalToPybindOutputDtype = {
             case RocalTensorOutputType::ROCAL_FP32:
                 out.bits = 32;
                 out.code = kDLFloat;
+                break;
+            case RocalTensorOutputType::ROCAL_INT16:
+                out.bits = 16;
+                out.code = kDLInt;
+                break;
             case RocalTensorOutputType::ROCAL_FP16:
                 out.bits = 16;
                 out.code = kDLFloat;
@@ -661,6 +670,7 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
         .value("FLOAT", ROCAL_FP32)
         .value("FLOAT16", ROCAL_FP16)
         .value("UINT8", ROCAL_UINT8)
+        .value("INT16", ROCAL_INT16)
         .export_values();
     py::enum_<RocalOutputMemType>(types_m, "RocalOutputMemType", "Output memory types")
         .value("HOST_MEMORY", ROCAL_MEMCPY_HOST)
@@ -704,6 +714,8 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
         .value("NHW", ROCAL_NHW)
         .value("NFT", ROCAL_NFT)
         .value("NTF", ROCAL_NTF)
+        .value("NDHWC", ROCAL_NDHWC)
+        .value("NCDHW", ROCAL_NCDHW)
         .export_values();
     py::enum_<RocalDecodeDevice>(types_m, "RocalDecodeDevice", "Decode device type")
         .value("HARDWARE_DECODE", ROCAL_HW_DECODE)
@@ -1130,6 +1142,8 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
     m.def("normalize", &rocalNormalize,
           py::return_value_policy::reference);
     m.def("melFilterBank", &rocalMelFilterBank,
+          py::return_value_policy::reference);
+    m.def("transpose", &rocalTranspose,
           py::return_value_policy::reference);
 }
 }  // namespace rocal

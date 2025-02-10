@@ -151,6 +151,10 @@ class TensorInfo {
             dims_mapping = {0, 1, 4, 2, 3};
         } else if (input_layout == RocalTensorlayout::NFCHW && output_layout == RocalTensorlayout::NFHWC) {
             dims_mapping = {0, 1, 3, 4, 2};
+        } else if (input_layout == RocalTensorlayout::NCDHW && output_layout == RocalTensorlayout::NDHWC) {
+            dims_mapping = {0, 2, 3, 4, 1};
+        } else if (input_layout == RocalTensorlayout::NDHWC && output_layout == RocalTensorlayout::NCDHW) {
+            dims_mapping = {0, 4, 1, 2, 3};
         } else {
             THROW("Invalid layout conversion")
         }
@@ -164,6 +168,14 @@ class TensorInfo {
             if (_layout == RocalTensorlayout::NHW || _layout == RocalTensorlayout::NFT || _layout == RocalTensorlayout::NTF) {   // For Audio/2D layouts
                 _max_shape[0] = _dims.at(1);
                 _max_shape[1] = _dims.at(2);
+            } else if (_layout == RocalTensorlayout::NDHWC) {
+                _max_shape.resize(4);
+                _max_shape.assign(_dims.begin() + 1, _dims.end());
+                _channels = _dims.at(4);
+            } else if (_layout == RocalTensorlayout::NCDHW) {
+                _max_shape.resize(4);
+                _max_shape.assign(_dims.begin() + 1, _dims.end());
+                _channels = _dims.at(1);
             } else {            // For Image layouts
                 _is_image = true;
                 if (_layout == RocalTensorlayout::NHWC) {
@@ -230,6 +242,31 @@ class TensorInfo {
             case RocalTensorlayout::NFCHW: {
                 _max_shape[1] = _dims[3] = height;
                 _max_shape[0] = _dims[4] = width;
+                break;
+            }
+            default: {
+                THROW("Invalid layout type specified")
+            }
+        }
+        modify_strides();
+        _data_size = _strides[0] * _dims[0];  // Modify data size wrt latest width and height
+        set_tensor_layout(layout);            // Modify the layout and dims based on the layout input
+        reset_tensor_roi_buffers();           // Reset ROI buffers to reflect the modified width and height
+    }
+    void modify_dims(RocalTensorlayout layout, std::vector<int> new_dims) {
+        switch (_layout) {
+            case RocalTensorlayout::NDHWC: {
+                _max_shape[0] = _dims[1] = new_dims[0];
+                _max_shape[1] = _dims[2] = new_dims[1];
+                _max_shape[2] = _dims[3] = new_dims[2];
+                _max_shape[3] = _dims[4] = new_dims[3];
+                break;
+            }
+            case RocalTensorlayout::NCDHW: {
+                _max_shape[0] = _dims[1] = new_dims[0];
+                _max_shape[1] = _dims[2] = new_dims[1];
+                _max_shape[2] = _dims[3] = new_dims[2];
+                _max_shape[3] = _dims[4] = new_dims[3];
                 break;
             }
             default: {
