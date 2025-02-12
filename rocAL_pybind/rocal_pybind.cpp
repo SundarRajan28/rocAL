@@ -653,6 +653,16 @@ PYBIND11_MODULE(rocal_pybind, m) {
                 Returns a rocal tensor at given position `i` in the rocalTensorlist.
                 )code",
             py::keep_alive<0, 1>());
+py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
+        .def(
+            "__getitem__",
+            [](rocalListOfTensorList &output_tensor_list, uint idx) {
+                return output_tensor_list.at(idx);
+            },
+            R"code(
+                Returns a TensorList at given position in the list.
+                )code",
+            py::return_value_policy::reference);
 
     py::module types_m = m.def_submodule("types");
     types_m.doc() = "Datatypes and options used by ROCAL";
@@ -707,6 +717,7 @@ PYBIND11_MODULE(rocal_pybind, m) {
         .value("RGB_PLANAR", ROCAL_COLOR_RGB_PLANAR)
         .export_values();
     py::enum_<RocalTensorLayout>(types_m, "RocalTensorLayout", "Tensor layout type")
+        .value("NONE", ROCAL_NONE)
         .value("NHWC", ROCAL_NHWC)
         .value("NCHW", ROCAL_NCHW)
         .value("NFHWC", ROCAL_NFHWC)
@@ -727,6 +738,7 @@ PYBIND11_MODULE(rocal_pybind, m) {
         .value("DECODER_HW_JEPG", ROCAL_DECODER_HW_JPEG)
         .value("DECODER_VIDEO_FFMPEG_SW", ROCAL_DECODER_VIDEO_FFMPEG_SW)
         .value("DECODER_VIDEO_FFMPEG_HW", ROCAL_DECODER_VIDEO_FFMPEG_HW)
+        .value("DECODER_VIDEO_ROCDECODE", ROCAL_DECODER_VIDEO_ROCDECODE)
         .export_values();
     py::enum_<RocalExternalSourceMode>(types_m, "RocalExternalSourceMode", "Rocal Extrernal Source Mode")
         .value("EXTSOURCE_FNAME", ROCAL_EXTSOURCE_FNAME)
@@ -752,6 +764,11 @@ PYBIND11_MODULE(rocal_pybind, m) {
         .value("LAST_BATCH_DROP", ROCAL_LAST_BATCH_DROP)
         .value("LAST_BATCH_PARTIAL", ROCAL_LAST_BATCH_PARTIAL)
         .export_values();
+    py::enum_<RocalMissingComponentsBehaviour>(types_m, "RocalMissingComponentsBehaviour", "Rocal Missing components behavior")
+        .value("MISSING_COMPONENT_ERROR", ROCAL_MISSING_COMPONENT_ERROR)
+        .value("MISSING_COMPONENT_SKIP", ROCAL_MISSING_COMPONENT_SKIP)
+        .value("MISSING_COMPONENT_EMPTY", ROCAL_MISSING_COMPONENT_EMPTY)
+        .export_values();
     py::class_<ROIxywh>(m, "ROIxywh")
         .def(py::init<>())
         .def_readwrite("x", &ROIxywh::x)
@@ -765,6 +782,10 @@ PYBIND11_MODULE(rocal_pybind, m) {
         .def_readwrite("pad_last_batch_repeated", &RocalShardingInfo::pad_last_batch_repeated)
         .def_readwrite("stick_to_shard", &RocalShardingInfo::stick_to_shard)
         .def_readwrite("shard_size", &RocalShardingInfo::shard_size);
+    py::class_<RocalNSROutput>(m, "RocalNSROutput")
+        .def(py::init<>())
+        .def_readonly("anchor", &RocalNSROutput::anchor)
+        .def_readonly("shape", &RocalNSROutput::shape);
     // rocal_api_info.h
     m.def("getRemainingImages", &rocalGetRemainingImages);
     m.def("getImageName", &wrapper_image_name);
@@ -783,6 +804,7 @@ PYBIND11_MODULE(rocal_pybind, m) {
     m.def("caffeReaderDetection", &rocalCreateCaffeLMDBReaderDetection, py::return_value_policy::reference);
     m.def("caffe2ReaderDetection", &rocalCreateCaffe2LMDBReaderDetection, py::return_value_policy::reference);
     m.def("mxnetReader", &rocalCreateMXNetReader, py::return_value_policy::reference);
+    m.def("webDatasetReader", &rocalCreateWebDatasetReader, py::return_value_policy::reference);
     m.def("isEmpty", &rocalIsEmpty);
     m.def("getStatus", rocalGetStatus);
     m.def("rocalGetErrorMessage", &rocalGetErrorMessage);
@@ -878,6 +900,34 @@ PYBIND11_MODULE(rocal_pybind, m) {
         }
         return boxes_list;
     });
+    m.def("getAsciiDatas", [](RocalContext context) {
+        rocalListOfTensorList *ascii_sample_contents = rocalGetAsciiDatas(context);
+        py::list ext_componenet_list;
+        for(uint ext = 0; ext < ascii_sample_contents->size(); ext++) { // Number of components
+            rocalTensorList *ext_ascii_values_batch = ascii_sample_contents->at(ext);
+            py::list component_list;
+            py::array_t<uint8_t> components_array;
+            for (int i = 0; i < ext_ascii_values_batch->size(); i++) {
+                if (ext_ascii_values_batch->at(i)->buffer() !=  nullptr) {
+                components_array = py::array(py::buffer_info(
+                                             static_cast<uint8_t *>(ext_ascii_values_batch->at(i)->buffer()),
+                                             sizeof(uint8_t),
+                                             py::format_descriptor<uint8_t>::format(),
+                                             1,
+                                             {ext_ascii_values_batch->at(i)->dims().at(0)},
+                                             {sizeof(uint8_t)}));
+                } else {
+                        std::vector<size_t> shape = {0};  // Empty array with 0 elements
+                        // Create an empty NumPy array of type uint8_t (unsigned byte)
+                        py::array_t<uint8_t> empty_array(shape);
+                        components_array = empty_array;
+                }
+                component_list.append(components_array);
+            }
+            ext_componenet_list.append(component_list);
+        }
+        return ext_componenet_list;
+    });
     m.def("getMaskCount", [](RocalContext context, py::array_t<int> array) {
         auto buf = array.mutable_data();
         unsigned count = rocalGetMaskCount(context, buf);  // total number of polygons in complete batch
@@ -927,8 +977,8 @@ PYBIND11_MODULE(rocal_pybind, m) {
         py::return_value_policy::reference);
     m.def("rocalGetEncodedBoxesAndLables", [](RocalContext context, uint batch_size, uint num_anchors) {
         auto vec_pair_labels_boxes = rocalGetEncodedBoxesAndLables(context, batch_size * num_anchors);
-        auto labels_buf_ptr = static_cast<int *>(vec_pair_labels_boxes[0]->at(0)->buffer());
-        auto bboxes_buf_ptr = static_cast<float *>(vec_pair_labels_boxes[1]->at(0)->buffer());
+        auto labels_buf_ptr = static_cast<int *>(vec_pair_labels_boxes->at(0)->at(0)->buffer());
+        auto bboxes_buf_ptr = static_cast<float *>(vec_pair_labels_boxes->at(1)->at(0)->buffer());
 
         py::array_t<int> labels_array = py::array_t<int>(py::buffer_info(
             labels_buf_ptr,
@@ -995,7 +1045,7 @@ PYBIND11_MODULE(rocal_pybind, m) {
           py::return_value_policy::reference);
     m.def("externalSourceFeedInput", &wrapperRocalExternalSourceFeedInput,
           py::return_value_policy::reference);
-    m.def("audioDecoderSingleShard", &rocalAudioFileSourceSingleShard, "Reads file from the source given and decodes it",
+    m.def("webdatasetSourceSingleShard", &rocalWebDatasetSourceSingleShard, "Reads file from the source given and decodes it",
             py::return_value_policy::reference);
     m.def("audioDecoder", &rocalAudioFileSource, "Reads file from the source given and decodes it",
             py::return_value_policy::reference);
@@ -1004,8 +1054,6 @@ PYBIND11_MODULE(rocal_pybind, m) {
     m.def("numpyReaderSourceShard", &rocalNumpyFileSourceSingleShard, "Reads data from numpy files according to the shard id and number of shards",
           py::return_value_policy::reference);
     m.def("rocalResetLoaders", &rocalResetLoaders);
-    m.def("setLayout", &rocalSetLayout,
-          py::return_value_policy::reference);
     m.def("videoMetaDataReader", &rocalCreateVideoLabelReader, py::return_value_policy::reference);
     // rocal_api_augmentation.h
     m.def("ssdRandomCrop", &rocalSSDRandomCrop,
@@ -1017,6 +1065,8 @@ PYBIND11_MODULE(rocal_pybind, m) {
     m.def("resizeCropMirrorFixed", &rocalResizeCropMirrorFixed,
           py::return_value_policy::reference);
     m.def("cropResize", &rocalCropResize,
+          py::return_value_policy::reference);
+    m.def("roiResize", &rocalROIResize,
           py::return_value_policy::reference);
     m.def("copy", &rocalCopy,
           py::return_value_policy::reference);

@@ -92,21 +92,19 @@ evaluate_image_data_set(RocalImageSizeEvaluationPolicy decode_size_policy, Stora
     return std::make_tuple(max_width, max_height);
 };
 
-std::vector<size_t>
+std::tuple<std::vector<size_t>, RocalTensorDataType>
 evaluate_numpy_data_set(StorageType storage_type, DecoderType decoder_type,
                         const std::string& source_path, const std::vector<std::string>& files) {
     ImageSourceEvaluator source_evaluator;
     source_evaluator.set_size_evaluation_policy(MaxSizeEvaluationPolicy::MAXIMUM_FOUND_SIZE);
     auto reader_cfg = ReaderConfig(storage_type, source_path);
     if (!files.empty())
-        reader_cfg.set_files(files);
-    if (source_evaluator.create(reader_cfg) != ImageSourceEvaluatorStatus::OK)
-        THROW("Initializing file source input evaluator failed ")
+        reader_cfg.set_files_list(files);
+    if (source_evaluator.create_numpy_reader(reader_cfg) != ImageSourceEvaluatorStatus::OK)
+        THROW("Initializing numpy source input evaluator failed ")
     auto max_dims = source_evaluator.max_numpy_dims();
-    int data_type = (int)source_evaluator.get_numpy_dtype();
-    max_dims.push_back(data_type);
-
-    return max_dims;
+    auto data_type = source_evaluator.get_numpy_dtype();
+    return std::make_tuple(max_dims, data_type);
 };
 
 auto convert_color_format = [](RocalImageColor color_format, size_t n, size_t h, size_t w) {
@@ -165,6 +163,19 @@ auto convert_decoder_mode = [](RocalDecodeDevice decode_mode) {
         default:
 
             THROW("Unsupported decoder mode" + TOSTR(decode_mode))
+    }
+};
+
+auto convert_video_decoder_type = [](RocalDecoderType decoder_type) {
+    switch (decoder_type) {
+        case ROCAL_DECODER_VIDEO_FFMPEG_SW:
+            return DecoderType::FFMPEG_SW_DECODE;
+        case ROCAL_DECODER_VIDEO_FFMPEG_HW:
+            return DecoderType::FFMPEG_HW_DECODE;
+        case ROCAL_DECODER_VIDEO_ROCDECODE:
+            return DecoderType::ROCDEC_VIDEO_DECODE;
+        default:
+            THROW("Unsupported video decoder type" + TOSTR(decoder_type))
     }
 };
 
@@ -1640,6 +1651,7 @@ rocalVideoFileSource(
     bool shuffle,
     bool is_output,
     bool loop,
+    RocalDecoderType rocal_decoder_type,
     unsigned step,
     unsigned stride,
     bool file_list_frame_num,
@@ -1660,12 +1672,8 @@ rocalVideoFileSource(
         stride = (stride == 0) ? 1 : stride;
 
         VideoProperties video_prop;
-        DecoderType decoder_type;
+        DecoderType decoder_type = convert_video_decoder_type(rocal_decoder_type);
         find_video_properties(video_prop, source_path, file_list_frame_num);
-        if (rocal_decode_device == RocalDecodeDevice::ROCAL_HW_DECODE)
-            decoder_type = DecoderType::FFMPEG_HARDWARE_DECODE;
-        else
-            decoder_type = DecoderType::FFMPEG_SOFTWARE_DECODE;
         auto [color_format, tensor_layout, dims, num_of_planes] = convert_color_format_sequence(rocal_color_format, context->user_batch_size(),
                                                                                                 video_prop.height, video_prop.width, sequence_length);
         auto decoder_mode = convert_decoder_mode(rocal_decode_device);
@@ -1699,6 +1707,7 @@ rocalNumpyFileSource(
     RocalContext p_context,
     const char* source_path,
     unsigned shard_count,
+    RocalTensorLayout output_layout,
     std::vector<std::string> files,
     bool is_output,
     bool shuffle,
@@ -1708,24 +1717,11 @@ rocalNumpyFileSource(
     Tensor* output = nullptr;
     auto context = static_cast<Context*>(p_context);
     try {
-        auto max_dimensions = evaluate_numpy_data_set(StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE,
+        auto [max_dimensions, tensor_data_type] = evaluate_numpy_data_set(StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE,
                                                       source_path, files);
 
-        RocalTensorDataType tensor_data_type;
-        std::map<int, RocalTensorDataType> data_type_map = {
-            {0, RocalTensorDataType::FP32},
-            {1, RocalTensorDataType::FP16},
-            {2, RocalTensorDataType::UINT8},
-            {3, RocalTensorDataType::INT8},
-            {4, RocalTensorDataType::UINT32},
-            {5, RocalTensorDataType::INT32},
-            {6, RocalTensorDataType::INT16},
-        };
-        tensor_data_type = data_type_map[max_dimensions.back()];
-        max_dimensions.pop_back();
-        unsigned num_of_dims = max_dimensions.size() + 1;
-        std::vector<size_t> dims;
-        dims.resize(num_of_dims);
+        RocalTensorlayout op_tensor_layout = static_cast<RocalTensorlayout>(output_layout);
+        std::vector<size_t> dims(max_dimensions.size() + 1);
         dims[0] = context->user_batch_size();
         for (uint i = 0; i < max_dimensions.size(); i++)
             dims[i + 1] = max_dimensions[i];
@@ -1733,6 +1729,7 @@ rocalNumpyFileSource(
                                context->master_graph->mem_type(),
                                tensor_data_type);
         info.set_max_shape();
+        info.set_tensor_layout(op_tensor_layout);
         output = context->master_graph->create_loader_output_tensor(info);
 
         ShardingInfo sharding_info(convert_last_batch_policy(rocal_sharding_info.last_batch_policy), rocal_sharding_info.pad_last_batch_repeated, rocal_sharding_info.stick_to_shard, rocal_sharding_info.shard_size);
@@ -1755,6 +1752,7 @@ RocalTensor ROCAL_API_CALL
 rocalNumpyFileSourceSingleShard(
     RocalContext p_context,
     const char* source_path,
+    RocalTensorLayout output_layout,
     std::vector<std::string> files,
     bool is_output,
     bool shuffle,
@@ -1772,25 +1770,11 @@ rocalNumpyFileSourceSingleShard(
         if (shard_id >= shard_count)
             THROW("Shard id should be smaller than shard count")
 
-        auto max_dimensions = evaluate_numpy_data_set(StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE,
+        auto [max_dimensions, tensor_data_type] = evaluate_numpy_data_set(StorageType::NUMPY_DATA, DecoderType::SKIP_DECODE,
                                                       source_path, files);
 
-        RocalTensorDataType tensor_data_type;
-        std::map<int, RocalTensorDataType> data_type_map = {
-            {0, RocalTensorDataType::FP32},
-            {1, RocalTensorDataType::FP16},
-            {2, RocalTensorDataType::UINT8},
-            {3, RocalTensorDataType::INT8},
-            {4, RocalTensorDataType::UINT32},
-            {5, RocalTensorDataType::INT32},
-            {6, RocalTensorDataType::INT16},
-        };
-        auto dtype = max_dimensions.at(max_dimensions.size() - 1);
-        max_dimensions.pop_back();
-        tensor_data_type = data_type_map[dtype];
-        unsigned num_of_dims = max_dimensions.size() + 1;
-        std::vector<size_t> dims;
-        dims.resize(num_of_dims);
+        RocalTensorlayout op_tensor_layout = static_cast<RocalTensorlayout>(output_layout);
+        std::vector<size_t> dims(max_dimensions.size() + 1);
         dims[0] = context->user_batch_size();
         for (uint i = 0; i < max_dimensions.size(); i++)
             dims[i + 1] = max_dimensions[i];
@@ -1798,6 +1782,7 @@ rocalNumpyFileSourceSingleShard(
                                context->master_graph->mem_type(),
                                tensor_data_type);
         info.set_max_shape();
+        info.set_tensor_layout(op_tensor_layout);
         output = context->master_graph->create_loader_output_tensor(info);
 
         ShardingInfo sharding_info(convert_last_batch_policy(rocal_sharding_info.last_batch_policy), rocal_sharding_info.pad_last_batch_repeated, rocal_sharding_info.stick_to_shard, rocal_sharding_info.shard_size);
@@ -1828,6 +1813,7 @@ rocalVideoFileSourceSingleShard(
     bool shuffle,
     bool is_output,
     bool loop,
+    RocalDecoderType rocal_decoder_type,
     unsigned step,
     unsigned stride,
     bool file_list_frame_num,
@@ -1854,12 +1840,8 @@ rocalVideoFileSourceSingleShard(
         stride = (stride == 0) ? 1 : stride;
 
         VideoProperties video_prop;
-        DecoderType decoder_type;
+        DecoderType decoder_type = convert_video_decoder_type(rocal_decoder_type);
         find_video_properties(video_prop, source_path, file_list_frame_num);
-        if (rocal_decode_device == RocalDecodeDevice::ROCAL_HW_DECODE)
-            decoder_type = DecoderType::FFMPEG_HARDWARE_DECODE;
-        else
-            decoder_type = DecoderType::FFMPEG_SOFTWARE_DECODE;
         auto [color_format, tensor_layout, dims, num_of_planes] = convert_color_format_sequence(rocal_color_format, context->user_batch_size(),
                                                                                                 video_prop.height, video_prop.width, sequence_length);
         auto decoder_mode = convert_decoder_mode(rocal_decode_device);
@@ -1901,6 +1883,7 @@ rocalVideoFileResize(
     bool shuffle,
     bool is_output,
     bool loop,
+    RocalDecoderType rocal_decoder_type,
     unsigned step,
     unsigned stride,
     bool file_list_frame_num,
@@ -1927,12 +1910,8 @@ rocalVideoFileResize(
         stride = (stride == 0) ? 1 : stride;
 
         VideoProperties video_prop;
-        DecoderType decoder_type;
+        DecoderType decoder_type = convert_video_decoder_type(rocal_decoder_type);
         find_video_properties(video_prop, source_path, file_list_frame_num);
-        if (rocal_decode_device == RocalDecodeDevice::ROCAL_HW_DECODE)
-            decoder_type = DecoderType::FFMPEG_HARDWARE_DECODE;
-        else
-            decoder_type = DecoderType::FFMPEG_SOFTWARE_DECODE;
         auto [color_format, tensor_layout, dims, num_of_planes] = convert_color_format_sequence(rocal_color_format, context->user_batch_size(),
                                                                                                 video_prop.height, video_prop.width, sequence_length);
         auto decoder_mode = convert_decoder_mode(rocal_decode_device);
@@ -2054,6 +2033,7 @@ rocalVideoFileResizeSingleShard(
     bool shuffle,
     bool is_output,
     bool loop,
+    RocalDecoderType rocal_decoder_type,
     unsigned step,
     unsigned stride,
     bool file_list_frame_num,
@@ -2086,12 +2066,8 @@ rocalVideoFileResizeSingleShard(
         stride = (stride == 0) ? 1 : stride;
 
         VideoProperties video_prop;
-        DecoderType decoder_type;
+        DecoderType decoder_type = convert_video_decoder_type(rocal_decoder_type);
         find_video_properties(video_prop, source_path, file_list_frame_num);
-        if (rocal_decode_device == RocalDecodeDevice::ROCAL_HW_DECODE)
-            decoder_type = DecoderType::FFMPEG_HARDWARE_DECODE;
-        else
-            decoder_type = DecoderType::FFMPEG_SOFTWARE_DECODE;
         auto [color_format, tensor_layout, dims, num_of_planes] = convert_color_format_sequence(rocal_color_format, context->user_batch_size(),
                                                                                                 video_prop.height, video_prop.width, sequence_length);
         auto decoder_mode = convert_decoder_mode(rocal_decode_device);
@@ -2438,6 +2414,76 @@ rocalAudioFileSource(
     return output;
 }
 
+RocalTensor ROCAL_API_CALL
+rocalWebDatasetSourceSingleShard(
+    RocalContext p_context,
+    const char* source_path,
+    const char* index_path,
+    RocalImageColor rocal_color_format,
+    unsigned shard_id,
+    unsigned shard_count,
+    bool is_output,
+    bool shuffle,
+    bool loop,
+    RocalImageSizeEvaluationPolicy decode_size_policy,
+    unsigned max_width,
+    unsigned max_height,
+    RocalDecoderType dec_type,
+    RocalShardingInfo rocal_sharding_info) {
+    Tensor* output = nullptr;
+    auto context = static_cast<Context*>(p_context);
+    try {
+#ifdef ENABLE_WDS
+        bool use_input_dimension = (decode_size_policy == ROCAL_USE_USER_GIVEN_SIZE) || (decode_size_policy == ROCAL_USE_USER_GIVEN_SIZE_RESTRICTED);
+        bool decoder_keep_original = (decode_size_policy == ROCAL_USE_USER_GIVEN_SIZE_RESTRICTED) || (decode_size_policy == ROCAL_USE_MAX_SIZE_RESTRICTED);
+        DecoderType decType = DecoderType::TURBO_JPEG;  // default
+        if (dec_type == ROCAL_DECODER_OPENCV) {
+            decType = DecoderType::OPENCV_DEC;
+        } else if (dec_type == ROCAL_DECODER_HW_JPEG) {
+            decType = DecoderType::HW_JPEG_DEC;
+        }
+
+        if (shard_count < 1) {
+            THROW("Shard count should be bigger than 0");
+        } else if (shard_id >= shard_count) {
+            THROW("Shard id should be smaller than shard count");
+        }
+
+        if (use_input_dimension && (max_width == 0 || max_height == 0)) {
+            THROW("Invalid input max width and height");
+        } else {
+            LOG("User input size " + TOSTR(max_width) + " x " + TOSTR(max_height))
+        }
+        auto [width, height] = evaluate_image_data_set(decode_size_policy, StorageType::WEBDATASET_RECORDS, decType, source_path, index_path);
+        auto [color_format, tensor_layout, dims, num_of_planes] = convert_color_format(rocal_color_format, context->user_batch_size(), height, width);
+        INFO("Internal buffer size width = " + TOSTR(width) + " height = " + TOSTR(height) + " depth = " + TOSTR(num_of_planes))
+
+        auto info = TensorInfo(std::move(dims),
+                               context->master_graph->mem_type(),
+                               RocalTensorDataType::UINT8,
+                               tensor_layout,
+                               color_format);
+        output = context->master_graph->create_loader_output_tensor(info);
+        auto cpu_num_threads = context->master_graph->calculate_cpu_num_threads(shard_count);
+        ShardingInfo sharding_info(convert_last_batch_policy(rocal_sharding_info.last_batch_policy), rocal_sharding_info.pad_last_batch_repeated, rocal_sharding_info.stick_to_shard, rocal_sharding_info.shard_size);
+        context->master_graph->add_node<ImageLoaderSingleShardNode>({}, {output})->init(shard_id, shard_count, cpu_num_threads, source_path, "", StorageType::WEBDATASET_RECORDS, decType, shuffle, loop, context->user_batch_size(), context->master_graph->mem_type(), context->master_graph->meta_data_reader(), decoder_keep_original, sharding_info, 
+                                                                                        std::map<std::string, std::string>(), 0, 0, 0, ExternalSourceFileMode::NONE, index_path);
+        context->master_graph->set_loop(loop);
+
+        if (is_output) {
+            auto actual_output = context->master_graph->create_tensor(info, is_output);
+            context->master_graph->add_node<CopyNode>({output}, {actual_output});
+        }
+#else
+        THROW("Webdataset reader is not enabled since libtar is not present")
+#endif
+    } catch (const std::exception& e) {
+        context->capture_error(e.what());
+        std::cerr << e.what() << '\n';
+    }
+    return output;
+}
+
 RocalStatus ROCAL_API_CALL
 rocalResetLoaders(RocalContext p_context) {
     auto context = static_cast<Context*>(p_context);
@@ -2449,27 +2495,4 @@ rocalResetLoaders(RocalContext p_context) {
         return ROCAL_RUNTIME_ERROR;
     }
     return ROCAL_OK;
-}
-
-RocalTensor ROCAL_API_CALL
-rocalSetLayout(
-    RocalContext p_context,
-    RocalTensor p_input,
-    RocalTensorLayout output_layout) {
-    Tensor* output = nullptr;
-    if ((p_context == nullptr) || (p_input == nullptr)) {
-        ERR("Invalid ROCAL context or invalid input tensor")
-        return output;
-    }
-
-    auto context = static_cast<Context*>(p_context);
-    auto input = static_cast<Tensor*>(p_input);
-    try {
-        RocalTensorlayout op_tensor_layout = static_cast<RocalTensorlayout>(output_layout);
-        input->set_layout(op_tensor_layout);
-    } catch (const std::exception& e) {
-        context->capture_error(e.what());
-        ERR(e.what())
-    }
-    return input;
 }

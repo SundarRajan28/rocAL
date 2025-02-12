@@ -177,7 +177,7 @@ void NumpyDataReader::skip_field(const char*& ptr, const char (&name)[N]) {
     skip_spaces(ptr);
 }
 
-template <typename T = int64_t>
+template <typename T>
 T NumpyDataReader::parse_int(const char*& ptr) {
     char* out_ptr = const_cast<char*>(ptr);  // strtol takes a non-const pointer
     T value = static_cast<T>(strtol(ptr, &out_ptr, 10));
@@ -295,7 +295,7 @@ void NumpyDataReader::parse_header(NumpyHeaderData& parsed_header, std::string f
         THROW("Error extracting header length.");
 
     // read header: the offset is a magic number
-    int64_t offset = 6 + 1 + 1 + 2;
+    int64_t offset = 10;
     token.resize(header_len + 1);
     if (std::fseek(_current_fPtr, offset, SEEK_SET))
         THROW("Seek operation failed: " + std::strerror(errno));
@@ -422,7 +422,7 @@ Reader::Status NumpyDataReader::generate_file_names() {
         THROW("NumpyDataReader ShardID [" + TOSTR(_shard_id) + "] ERROR: Failed opening the directory at " + _folder_path);
 
     std::vector<std::string> entry_name_list;
-    std::string _full_path = _folder_path;
+    std::string full_path = _folder_path;
 
     while ((_entity = readdir(_sub_dir)) != nullptr) {
         std::string entry_name(_entity->d_name);
@@ -500,7 +500,7 @@ Reader::Status NumpyDataReader::generate_file_names() {
         }
     } else {
         for (unsigned dir_count = 0; dir_count < entry_name_list.size(); ++dir_count) {
-            std::string subfolder_path = _full_path + "/" + entry_name_list[dir_count];
+            std::string subfolder_path = full_path + "/" + entry_name_list[dir_count];
             filesys::path pathObj(subfolder_path);
             if (filesys::exists(pathObj) && filesys::is_regular_file(pathObj)) {
                 // ignore files with unsupported extensions
@@ -584,13 +584,4 @@ Reader::Status NumpyDataReader::open_folder() {
 
 std::string NumpyDataReader::get_root_folder_path() {
     return _folder_path;
-}
-
-std::vector<std::string> NumpyDataReader::get_file_paths_from_meta_data_reader() {
-    if (_meta_data_reader) {
-        return _meta_data_reader->get_relative_file_path();
-    } else {
-        std::cout << "\n Meta Data Reader is not initialized!";
-        return {};
-    }
 }

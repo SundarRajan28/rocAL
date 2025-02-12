@@ -8,7 +8,6 @@ import numpy as np
 from amd.rocal.pipeline import Pipeline
 from amd.rocal.plugin.pytorch import ROCALNumpyIterator
 import amd.rocal.fn as fn
-import amd.rocal.types as types
 import sys
 import os, glob
 
