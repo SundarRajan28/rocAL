@@ -8,6 +8,7 @@ import numpy as np
 from amd.rocal.pipeline import Pipeline
 from amd.rocal.plugin.pytorch import ROCALNumpyIterator
 import amd.rocal.fn as fn
+import amd.rocal.types as types
 import sys
 import os, glob
 
@@ -47,10 +48,9 @@ def main():
     pipeline = Pipeline(batch_size=batch_size, num_threads=num_threads, device_id=device_id, seed=random_seed, rocal_cpu=rocal_cpu, prefetch_queue_depth=6)
 
     with pipeline:
-        numpy_reader_output = fn.readers.numpy(file_root=data_path, files=x_train, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
+        numpy_reader_output = fn.readers.numpy(file_root=data_path, output_layout=types.NDHWC, files=x_train, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
         label_output = fn.readers.numpy(file_root=data_path, files=y_train, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
-        data_output = fn.set_layout(numpy_reader_output, output_layout=types.NDHWC)
-        log_add_output = fn.log(data_output)
+        log_add_output = fn.log(numpy_reader_output)
         pipeline.set_outputs(log_add_output, label_output)
 
     pipeline.build()
@@ -58,10 +58,9 @@ def main():
     val_pipeline = Pipeline(batch_size=batch_size, num_threads=num_threads, device_id=device_id, seed=random_seed, rocal_cpu=rocal_cpu, prefetch_queue_depth=6)
 
     with val_pipeline:
-        numpy_reader_output = fn.readers.numpy(file_root=data_path1, files=x_val, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
+        numpy_reader_output = fn.readers.numpy(file_root=data_path1, output_layout=types.NDHWC, files=x_val, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
         label_output = fn.readers.numpy(file_root=data_path1, files=y_val, shard_id=local_rank, num_shards=world_size, seed=random_seed+local_rank)
-        data_output = fn.set_layout(numpy_reader_output, output_layout=types.NDHWC)
-        log_add_output = fn.log(data_output)
+        log_add_output = fn.log(numpy_reader_output)
         val_pipeline.set_outputs(log_add_output, label_output)
 
     val_pipeline.build()
