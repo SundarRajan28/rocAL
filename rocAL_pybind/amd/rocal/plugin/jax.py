@@ -55,9 +55,8 @@ class ROCALJaxIterator(object):
         @param device_id           The ID of the device to use
     """
 
-    def __init__(self, pipeline, device="cpu", device_id=0):
+    def __init__(self, pipeline, device_id=0):
         self.loader = pipeline
-        self.device = device
         self.device_id = device_id
         self.batch_size = pipeline._batch_size
         if self.loader._name is None:
@@ -126,7 +125,7 @@ class ROCALJaxIterator(object):
         for i in range(len(self.output_tensor_list)):
             self.dimensions = self.output_tensor_list[i].dimensions()
             self.dtype = self.output_tensor_list[i].dtype()
-            self.output = convert_to_jax_array(self.output_tensor_list[i])
+            self.output = convert_to_jax_array(self.output_tensor_list[i].__dlpack__(self.device_id))
             self.output_list.append(self.output)
         if (self.loader._is_external_source_operator):
             self.labels = self.loader.get_image_labels()
