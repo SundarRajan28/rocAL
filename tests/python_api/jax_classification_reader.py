@@ -37,7 +37,7 @@ def draw_patches(img, idx, layout="nchw", dtype="fp32"):
     if dtype == "fp16":
         image = image.astype("uint8")
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    cv2.imwrite("output_folder/file_reader/" + str(idx) +
+    cv2.imwrite("output_folder/jax_reader/" + str(idx) +
                 "_" + "train" + ".png", image * 255)
 
 
@@ -46,7 +46,7 @@ def main():
         print("Please pass image_folder cpu/gpu batch_size")
         exit(0)
     try:
-        path = "output_folder/file_reader/"
+        path = "output_folder/jax_reader/"
         isExist = os.path.exists(path)
         if not isExist:
             os.makedirs(path)
@@ -84,7 +84,8 @@ def main():
 
     image_classification_train_pipeline.build()
     imageIteratorPipeline = ROCALJaxIterator(
-        image_classification_train_pipeline)
+        [image_classification_train_pipeline])
+
     cnt = 0
     for epoch in range(3):
         print(
@@ -95,7 +96,7 @@ def main():
                 "************************************** i *************************************", i)
             for img in it[0]:
                 cnt += 1
-                draw_patches(img[0], cnt, layout="nhwc",
+                draw_patches(img, cnt, layout="nhwc",
                              dtype="fp16")
         imageIteratorPipeline.reset()
     print("*********************************************************************")

@@ -23,7 +23,12 @@
 #
 # @brief File containing iterators and functions for JAX framework
 
+from matplotlib import category
 import jax
+import jax.dlpack
+import jax.numpy as jnp
+from jax.sharding import NamedSharding, PositionalSharding, Sharding
+
 import numpy as np
 from packaging.version import Version
 
@@ -47,6 +52,7 @@ def convert_to_jax_array(array):
     jax_array = jax.dlpack.from_dlpack(array)
     return jax_array
 
+
 class ROCALJaxIterator(object):
     """!Iterator for processing data
 
@@ -55,100 +61,132 @@ class ROCALJaxIterator(object):
         @param device_id           The ID of the device to use
     """
 
-    def __init__(self, pipeline, device_id=0):
-        self.loader = pipeline
-        self.device_id = device_id
-        self.batch_size = pipeline._batch_size
-        if self.loader._name is None:
-            self.loader._name = self.loader._reader
-        self.labels_size = ((self.batch_size * self.loader._num_classes)
-                            if self.loader._one_hot_encoding else self.batch_size)
+    def __init__(self, pipelines, sharding=None):
+        self.pipelines = pipelines
+        self.num_devices = len(pipelines)
+        self.batch_size = pipelines[0]._batch_size
+
         self.dimensions = self.dtype = None
         self.labels_tensor = None
         self.iterator_length = b.getRemainingImages(
-            self.loader._handle) // self.batch_size  # iteration length
-        if self.loader._is_external_source_operator:
-            self.eos = False
-            self.index = 0
-            self.num_batches = self.loader._external_source.n // self.batch_size if self.loader._external_source.n % self.batch_size == 0 else (
-                self.loader._external_source.n // self.batch_size + 1)
+            pipelines[0]._handle) // self.batch_size  # Length should be the same across all pipelines
+
+        if sharding is not None:
+            assert isinstance(
+                sharding, (NamedSharding, PositionalSharding)
+            ), "`sharding` should be an instance of `NamedSharding` or `PositionalSharding`"
+        self._sharding = sharding
 
     def next(self):
         return self.__next__()
 
     def __next__(self):
-        if (self.loader._is_external_source_operator):
-            if (self.index + 1) == self.num_batches:
-                self.eos = True
-            if (self.index + 1) <= self.num_batches:
-                data_loader_source = next(self.loader._external_source)
-                # Extract all data from the source
-                images_list = data_loader_source[0] if (self.loader._external_source_mode == types.EXTSOURCE_FNAME) else []
-                input_buffer = data_loader_source[0] if (self.loader._external_source_mode != types.EXTSOURCE_FNAME) else []
-                labels_data = data_loader_source[1] if (len(data_loader_source) > 1) else None
-                roi_height = data_loader_source[2] if (len(data_loader_source) > 2) else []
-                roi_width = data_loader_source[3] if (len(data_loader_source) > 3) else []
-                ROIxywh_list = []
-                for i in range(self.batch_size):
-                    ROIxywh = b.ROIxywh()
-                    ROIxywh.x =  0
-                    ROIxywh.y =  0
-                    ROIxywh.w = roi_width[i] if len(roi_width) > 0 else 0
-                    ROIxywh.h = roi_height[i] if len(roi_height) > 0 else 0
-                    ROIxywh_list.append(ROIxywh)
-                if (len(data_loader_source) == 6 and self.loader._external_source_mode == types.EXTSOURCE_RAW_UNCOMPRESSED):
-                    decoded_height = data_loader_source[4]
-                    decoded_width = data_loader_source[5]
-                else:
-                    decoded_height = self.loader._external_source_user_given_height
-                    decoded_width = self.loader._external_source_user_given_width
+        outputs = []
+        for self.loader in self.pipelines:
+            if self.loader.rocal_run() != 0:
+                raise StopIteration
+            self.output_tensor_list = self.loader.get_output_tensors()
 
-                kwargs_pybind = {
-                    "handle": self.loader._handle,
-                    "source_input_images": images_list,
-                    "labels": labels_data,
-                    "input_batch_buffer": input_buffer,
-                    "roi_xywh": ROIxywh_list,
-                    "decoded_width": decoded_width,
-                    "decoded_height": decoded_height,
-                    "channels": 3,
-                    "external_source_mode": self.loader._external_source_mode,
-                    "rocal_tensor_layout": types.NCHW,
-                    "eos": self.eos}
-                b.externalSourceFeedInput(*(kwargs_pybind.values()))
-            self.index = self.index + 1
-        if self.loader.rocal_run() != 0:
-            raise StopIteration
-        self.output_tensor_list = self.loader.get_output_tensors()
+            self.output_list = []
+            self.device_id = self.loader._device_id
+            if self.loader._name is None:
+                self.loader._name = self.loader._reader
+            self.last_batch_policy = self.loader._last_batch_policy
+            assert (
+                self.last_batch_policy != types.LAST_BATCH_PARTIAL
+            ), "JAX iterator does not support partial last batch policy."
+            self.labels_size = ((self.batch_size * self.loader._num_classes)
+                                if self.loader._one_hot_encoding else self.batch_size)
+            for i in range(len(self.output_tensor_list)):
+                self.dimensions = self.output_tensor_list[i].dimensions()
+                self.dtype = self.output_tensor_list[i].dtype()
+                self.output = convert_to_jax_array(
+                    self.output_tensor_list[i].__dlpack__(self.device_id))
+                self.output_list.append(self.output)
 
-        self.output_list = []
-        for i in range(len(self.output_tensor_list)):
-            self.dimensions = self.output_tensor_list[i].dimensions()
-            self.dtype = self.output_tensor_list[i].dtype()
-            self.output = convert_to_jax_array(self.output_tensor_list[i].__dlpack__(self.device_id))
-            self.output_list.append(self.output)
-        if (self.loader._is_external_source_operator):
-            self.labels = self.loader.get_image_labels()
-            self.labels_tensor = self.labels.astype(dtype=np.int_)
-            return self.output_list, self.labels_tensor
-
-        if self.loader._name == "labelReader":
-            if self.loader._one_hot_encoding == True:
-                self.labels = np.empty(self.labels_size, dtype="int32")
-                self.loader.get_one_hot_encoded_labels(
+            if self.loader._name == "labelReader":
+                if self.loader._one_hot_encoding == True:
+                    self.labels = np.empty(self.labels_size, dtype="int32")
+                    self.loader.get_one_hot_encoded_labels(
                         self.labels.ctypes.data, self.loader._output_memory_type)
-                self.labels_tensor = self.labels.reshape(
-                    -1, self.batch_size, self.loader._num_classes)
-                self.labels_tensor = convert_to_jax_array(self.labels_tensor)
-            else:
-                self.labels = self.loader.get_image_labels()
-                self.labels_tensor = self.labels.astype(dtype=np.int_)
-                self.labels_tensor = convert_to_jax_array(self.labels_tensor)
+                    self.labels_tensor = self.labels.reshape(
+                        -1, self.batch_size, self.loader._num_classes)
+                    self.labels_tensor = convert_to_jax_array(
+                        self.labels_tensor)
+                else:
+                    self.labels = self.loader.get_image_labels()
+                    self.labels_tensor = self.labels.astype(dtype=np.int_)
+                    self.labels_tensor = convert_to_jax_array(
+                        self.labels_tensor)
+                self.labels_tensor = jax.device_put(
+                    self.labels_tensor, self.output_list[0].device)
+                self.output_list.append(self.labels_tensor)
+            outputs.append(self.output_list)
 
-        return self.output_list, self.labels_tensor
+        if self.num_devices == 1 and self._sharding is None:
+            return outputs[0]
+
+        new_outputs = [[] for i in range(len(outputs[0]))]
+        for i in range(len(outputs[0])):
+            category_outputs = []
+            for pipeline_id in range(self.num_devices):
+                category_outputs.append(outputs[pipeline_id][i])
+            self._assert_shards_shapes(category_outputs)
+            if self._sharding is not None:
+                new_outputs[i] = self._build_output_with_sharding(
+                    category_outputs)
+            else:
+                new_outputs[i] = self._build_output_with_device_put(
+                    category_outputs)
+        return new_outputs
 
     def reset(self):
-        b.rocalResetLoaders(self.loader._handle)
+        for self.loader in self.pipelines:
+            b.rocalResetLoaders(self.loader._handle)
+
+    def _build_output_with_device_put(self, category_outputs):
+        """Builds sharded jax.Array with `jax.device_put_sharded`. This output is compatible
+        with pmapped JAX functions.
+        """
+        category_outputs_devices = tuple(
+            map(lambda jax_shard: jax_shard.device, category_outputs)
+        )
+
+        distinct_category_outputs_devices = set(category_outputs_devices)
+
+        if len(category_outputs_devices) != len(distinct_category_outputs_devices):
+            if len(distinct_category_outputs_devices) != 1:
+                raise AssertionError(
+                    "JAX iterator requires shards to be placed on \
+                                                different devices or all on the same device."
+                )
+            else:
+                # All shards are on one device (CPU or one GPU)
+                return jnp.stack(category_outputs)
+        else:
+            # Build sharded JAX array as output for current category (compatible with pmap)
+            return jax.device_put_sharded(category_outputs, category_outputs_devices)
+
+    def _build_output_with_sharding(self, category_outputs):
+        """Builds sharded jax.Array with `jax.make_array_from_single_device_arrays`.
+        This output is compatible with automatic parallelization with JAX.
+        """
+        shard_shape = category_outputs[0].shape
+
+        if isinstance(self._sharding, NamedSharding):
+            global_shape = (self._sharding.mesh.size *
+                            shard_shape[0], *shard_shape[1:])
+        else:
+            global_shape = (
+                self._sharding.shape[0] * shard_shape[0], *shard_shape[1:])
+
+        return jax.make_array_from_single_device_arrays(
+            global_shape, self._sharding, category_outputs
+        )
+
+    def _assert_shards_shapes(self, category_outputs):
+        for shard in category_outputs:
+            assert shard.shape == category_outputs[0].shape, "Shards shapes have to be the same."
 
     def __iter__(self):
         return self
@@ -157,4 +195,5 @@ class ROCALJaxIterator(object):
         return self.iterator_length
 
     def __del__(self):
-        b.rocalRelease(self.loader._handle)
+        for self.loader in self.pipelines:
+            b.rocalRelease(self.loader._handle)
