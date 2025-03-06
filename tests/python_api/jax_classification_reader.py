@@ -27,6 +27,9 @@ import numpy as np
 import sys
 import os
 
+import jax
+from jax.sharding import Mesh, PartitionSpec, NamedSharding
+
 
 def draw_patches(img, idx, layout="nchw", dtype="fp32"):
     # image is expected as a tensor
@@ -55,49 +58,49 @@ def main():
     data_path = sys.argv[1]
     rocal_cpu = True if sys.argv[2] == "cpu" else False
     batch_size = int(sys.argv[3])
-    num_threads = 1
-    device_id = 0
+    num_threads = 8
     random_seed = random.SystemRandom().randint(0, 2**32 - 1)
 
-    local_rank = 0
-    world_size = 1
+    mesh = Mesh(jax.devices(), axis_names=("batch"))
+    sharding = NamedSharding(mesh, PartitionSpec("batch"))
+    pipelines = []
+    for id, device in enumerate(jax.devices()):
+        image_classification_train_pipeline = Pipeline(batch_size=batch_size, num_threads=num_threads, device_id=id,
+                                                       seed=random_seed, rocal_cpu=rocal_cpu, tensor_layout=types.NHWC, tensor_dtype=types.FLOAT16)
 
-    image_classification_train_pipeline = Pipeline(batch_size=batch_size, num_threads=num_threads, device_id=device_id,
-                                                   seed=random_seed, rocal_cpu=rocal_cpu, tensor_layout=types.NHWC, tensor_dtype=types.FLOAT16)
+        with image_classification_train_pipeline:
+            jpegs, labels = fn.readers.file(file_root=data_path)
+            decode = fn.decoders.image_slice(jpegs, output_type=types.RGB,
+                                             file_root=data_path, shard_id=id, num_shards=jax.device_count(), random_shuffle=True)
+            res = fn.resize(decode, resize_width=224, resize_height=224,
+                            output_layout=types.NCHW, output_dtype=types.UINT8)
+            flip_coin = fn.random.coin_flip(probability=0.5)
+            cmnp = fn.crop_mirror_normalize(res,
+                                            output_layout=types.NHWC,
+                                            output_dtype=types.FLOAT16,
+                                            crop=(224, 224),
+                                            mirror=flip_coin,
+                                            mean=[0.485 * 255, 0.456 *
+                                                  255, 0.406 * 255],
+                                            std=[0.229 * 255, 0.224 * 255, 0.225 * 255])
+            image_classification_train_pipeline.set_outputs(cmnp)
 
-    with image_classification_train_pipeline:
-        jpegs, labels = fn.readers.file(file_root=data_path)
-        decode = fn.decoders.image_slice(jpegs, output_type=types.RGB,
-                                         file_root=data_path, shard_id=local_rank, num_shards=world_size, random_shuffle=True)
-        res = fn.resize(decode, resize_width=224, resize_height=224,
-                        output_layout=types.NCHW, output_dtype=types.UINT8)
-        flip_coin = fn.random.coin_flip(probability=0.5)
-        cmnp = fn.crop_mirror_normalize(res,
-                                        output_layout=types.NHWC,
-                                        output_dtype=types.FLOAT16,
-                                        crop=(224, 224),
-                                        mirror=flip_coin,
-                                        mean=[0.485 * 255, 0.456 *
-                                              255, 0.406 * 255],
-                                        std=[0.229 * 255, 0.224 * 255, 0.225 * 255])
-        image_classification_train_pipeline.set_outputs(cmnp)
+        image_classification_train_pipeline.build()
+        print(
+            f'Pipeline {image_classification_train_pipeline} working on device {image_classification_train_pipeline._device_id}')
+        pipelines.append(image_classification_train_pipeline)
 
-    image_classification_train_pipeline.build()
-    imageIteratorPipeline = ROCALJaxIterator(
-        [image_classification_train_pipeline])
+    imageIteratorPipeline = ROCALJaxIterator(pipelines, sharding=sharding)
 
     cnt = 0
     for epoch in range(3):
         print(
             "+++++++++++++++++++++++++++++EPOCH+++++++++++++++++++++++++++++++++++++", epoch)
         for i, it in enumerate(imageIteratorPipeline):
-            print(it)
             print(
                 "************************************** i *************************************", i)
-            for img in it[0]:
-                cnt += 1
-                draw_patches(img, cnt, layout="nhwc",
-                             dtype="fp16")
+            for img in it:
+                print(img.shape, img.devices())
         imageIteratorPipeline.reset()
     print("*********************************************************************")
 

@@ -62,6 +62,8 @@ class ROCALJaxIterator(object):
     """
 
     def __init__(self, pipelines, sharding=None):
+        if not isinstance(pipelines, list):
+            pipelines = [pipelines]
         self.pipelines = pipelines
         self.num_devices = len(pipelines)
         self.batch_size = pipelines[0]._batch_size
@@ -81,7 +83,7 @@ class ROCALJaxIterator(object):
         return self.__next__()
 
     def __next__(self):
-        outputs = []
+        pipeline_outputs = []
         for self.loader in self.pipelines:
             if self.loader.rocal_run() != 0:
                 raise StopIteration
@@ -121,57 +123,55 @@ class ROCALJaxIterator(object):
                 self.labels_tensor = jax.device_put(
                     self.labels_tensor, self.output_list[0].device)
                 self.output_list.append(self.labels_tensor)
-            outputs.append(self.output_list)
+            pipeline_outputs.append(self.output_list)
 
         if self.num_devices == 1 and self._sharding is None:
-            return outputs[0]
+            return pipeline_outputs[0]
 
-        new_outputs = [[] for i in range(len(outputs[0]))]
-        for i in range(len(outputs[0])):
-            category_outputs = []
+        sharded_outputs = []
+        for i in range(len(pipeline_outputs[0])):
+            individual_outputs = []
             for pipeline_id in range(self.num_devices):
-                category_outputs.append(outputs[pipeline_id][i])
-            self._assert_shards_shapes(category_outputs)
+                individual_outputs.append(pipeline_outputs[pipeline_id][i])
+            for output in individual_outputs:
+                assert output.shape == individual_outputs[0].shape, "All outputs should have the same shape"
             if self._sharding is not None:
-                new_outputs[i] = self._build_output_with_sharding(
-                    category_outputs)
+                sharded_outputs.append(self.place_output_with_sharding(
+                    individual_outputs))
             else:
-                new_outputs[i] = self._build_output_with_device_put(
-                    category_outputs)
-        return new_outputs
+                sharded_outputs.append(self.place_output_with_device_put(
+                    individual_outputs))
+        return sharded_outputs
 
     def reset(self):
         for self.loader in self.pipelines:
             b.rocalResetLoaders(self.loader._handle)
 
-    def _build_output_with_device_put(self, category_outputs):
-        """Builds sharded jax.Array with `jax.device_put_sharded`. This output is compatible
+    def place_output_with_device_put(self, individual_outputs):
+        """Builds sharded jax.Array with `jax.device_put_sharded` - compatible
         with pmapped JAX functions.
         """
-        category_outputs_devices = tuple(
-            map(lambda jax_shard: jax_shard.device, category_outputs)
+        output_devices = tuple(
+            map(lambda jax_shard: jax_shard.device, individual_outputs)
         )
 
-        distinct_category_outputs_devices = set(category_outputs_devices)
-
-        if len(category_outputs_devices) != len(distinct_category_outputs_devices):
-            if len(distinct_category_outputs_devices) != 1:
+        if len(output_devices) != len(set(output_devices)):
+            if len(set(output_devices)) != 1:
                 raise AssertionError(
                     "JAX iterator requires shards to be placed on \
                                                 different devices or all on the same device."
                 )
             else:
                 # All shards are on one device (CPU or one GPU)
-                return jnp.stack(category_outputs)
+                return jnp.stack(individual_outputs)
         else:
-            # Build sharded JAX array as output for current category (compatible with pmap)
-            return jax.device_put_sharded(category_outputs, category_outputs_devices)
+            return jax.device_put_sharded(individual_outputs, output_devices)
 
-    def _build_output_with_sharding(self, category_outputs):
-        """Builds sharded jax.Array with `jax.make_array_from_single_device_arrays`.
-        This output is compatible with automatic parallelization with JAX.
+    def place_output_with_sharding(self, individual_outputs):
+        """Builds sharded jax.Array with `jax.make_array_from_single_device_arrays`-
+        compatible with automatic parallelization with JAX.
         """
-        shard_shape = category_outputs[0].shape
+        shard_shape = individual_outputs[0].shape
 
         if isinstance(self._sharding, NamedSharding):
             global_shape = (self._sharding.mesh.size *
@@ -181,12 +181,8 @@ class ROCALJaxIterator(object):
                 self._sharding.shape[0] * shard_shape[0], *shard_shape[1:])
 
         return jax.make_array_from_single_device_arrays(
-            global_shape, self._sharding, category_outputs
+            global_shape, self._sharding, individual_outputs
         )
-
-    def _assert_shards_shapes(self, category_outputs):
-        for shard in category_outputs:
-            assert shard.shape == category_outputs[0].shape, "Shards shapes have to be the same."
 
     def __iter__(self):
         return self
