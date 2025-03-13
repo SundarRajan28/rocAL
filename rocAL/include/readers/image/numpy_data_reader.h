@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +34,7 @@ THE SOFTWARE.
 
 class NumpyDataReader : public Reader {
    public:
-    //! Looks up the folder which contains the files, amd loads the numpy files
+    //! Looks up the folder which contains the files, and loads the numpy files
     /*!
      \param desc  User provided descriptor containing the files' path.
     */
@@ -61,7 +61,7 @@ class NumpyDataReader : public Reader {
     /*!
      \param buf User's provided buffer to receive the loaded numpy data
      \param raad_size Requested read size by the user
-     \param buf Max dimension strides of the output tensor used for padding along the dimensions
+     \param max_shape Max dimension strides of the output tensor used for padding along the dimensions
      \return Size of the loaded resource
     */
     size_t read_numpy_data(void* buf, size_t read_size, std::vector<unsigned>& max_shape) override;
@@ -75,15 +75,14 @@ class NumpyDataReader : public Reader {
     //! Returns the name of the latest file_path opened
     const std::string file_path() override { return _last_file_path; }
 
-    unsigned count_items() override;
-
     ~NumpyDataReader() override;
 
     int close() override;
 
     NumpyDataReader();
 
-    std::string get_root_folder_path() override;  // Returns the root folder path
+    //! Returns the root folder path
+    std::string get_root_folder_path() override;
 
    private:
     //! opens the folder containing the numpy arrays
@@ -91,44 +90,49 @@ class NumpyDataReader : public Reader {
     Reader::Status subfolder_reading();
     std::string _folder_path;
     std::string _file_list_path;
-    DIR *_src_dir;
-    DIR *_sub_dir;
-    struct dirent *_entity;
+    DIR *_src_dir = nullptr;
+    DIR *_sub_dir = nullptr;
+    struct dirent *_entity = nullptr;
+    FILE *_current_file_ptr = nullptr;
     std::vector<std::string> _file_names;
     std::vector<std::string> _files;
     std::vector<NumpyHeaderData> _file_headers;
-    FILE *_current_fPtr;
-    unsigned _current_file_size;
     NumpyHeaderData _curr_file_header;
     std::string _last_id;
     std::string _last_file_name, _last_file_path, _absolute_file_path;
-    size_t _batch_size = 1;
-    bool _loop;
-    bool _shuffle;
-    int _read_counter = 0;
     unsigned _seed = 0;
-    //!< _file_count_all_shards total_number of files in to figure out the max_batch_size (usually needed for distributed training).
     std::mutex _cache_mutex;
     std::map<std::string, NumpyHeaderData> _header_cache;
+    std::shared_ptr<MetaDataReader> _meta_data_reader = nullptr;
+    bool _header_parsing_failed = false;
+    //! Converts the dtype string to RocalTensorDataType format
     const RocalTensorDataType get_dtype(const std::string& format);
-    inline void skip_spaces(const char*& ptr);
+    //! Parse the header data and save header metadata info
     void parse_header_data(NumpyHeaderData& target, const std::string& header);
+    //! Skips the specific character(s) in a char array
     template <size_t N>
     void skip_char(const char*& ptr, const char (&what)[N]);
+    //! Skips the specific character(s) in a char array and returns true if present else returns false
     template <size_t N>
     bool try_skip_char(const char*& ptr, const char (&what)[N]);
+    //! Skips the specific field name in the numpy header string
     template <size_t N>
     void skip_field(const char*& ptr, const char (&name)[N]);
+    //! Converts the given char array to a long integer
     template <typename T = int64_t>
     T parse_int(const char*& ptr);
+    //! Parses the numpy header string to fetch the data type and endianness
     std::string parse_string(const char*& input, char delim_start = '\'', char delim_end = '\'');
+    //! Reads the npy file, parses the numpy header data and stores the metadata info
     void parse_header(NumpyHeaderData& parsed_header, std::string file_path);
+    //! Reads the numpy data present in the npy array and stores the data in the circular buffer
     template <typename T>
     size_t parse_numpy_data(T* buf, std::vector<unsigned>& strides, std::vector<unsigned>& shapes, unsigned dim = 0);
+    //! Fetches cached header data if its already parsed before
     bool get_header_from_cache(const std::string& file_name, NumpyHeaderData& target);
+    //! Stores parsed header data for a specific npy file
     void update_header_cache(const std::string& file_name, const NumpyHeaderData& value);
     void incremenet_read_ptr();
     int release();
-    std::shared_ptr<MetaDataReader> _meta_data_reader = nullptr;
     Reader::Status generate_file_names();            // Function that would generate _file_names containing all the samples in the dataset
 };

@@ -37,7 +37,6 @@ from rocal_pybind.types import CPU
 from rocal_pybind.types import UINT8
 from rocal_pybind.types import FLOAT
 from rocal_pybind.types import FLOAT16
-from rocal_pybind.types import UINT8
 from rocal_pybind.types import INT16
 
 #  RocalOutputMemType
@@ -81,6 +80,7 @@ from rocal_pybind.types import DECODER_OPENCV
 from rocal_pybind.types import DECODER_HW_JEPG
 from rocal_pybind.types import DECODER_VIDEO_FFMPEG_SW
 from rocal_pybind.types import DECODER_VIDEO_FFMPEG_HW
+from rocal_pybind.types import DECODER_AUDIO_GENERIC
 from rocal_pybind.types import DECODER_VIDEO_ROCDECODE
 
 #     RocalResizeScalingMode
@@ -140,7 +140,6 @@ _known_types = {
     UINT8: ("UINT8", UINT8),
     FLOAT: ("FLOAT", FLOAT),
     FLOAT16: ("FLOAT16", FLOAT16),
-    UINT8: ("UINT8", UINT8),
     INT16: ("INT16", INT16),
     HOST_MEMORY: ("HOST_MEMORY", HOST_MEMORY),
     DEVICE_MEMORY: ("DEVICE_MEMORY", DEVICE_MEMORY),
@@ -173,6 +172,8 @@ _known_types = {
     DECODER_HW_JEPG: ("DECODER_HW_JEPG", DECODER_HW_JEPG),
     DECODER_VIDEO_FFMPEG_SW: ("DECODER_VIDEO_FFMPEG_SW", DECODER_VIDEO_FFMPEG_SW),
     DECODER_VIDEO_FFMPEG_HW: ("DECODER_VIDEO_FFMPEG_HW", DECODER_VIDEO_FFMPEG_HW),
+    DECODER_AUDIO_GENERIC: ("DECODER_AUDIO_GENERIC", DECODER_AUDIO_GENERIC),
+    DECODER_VIDEO_ROCDECODE : ("DECODER_VIDEO_ROCDECODE", DECODER_VIDEO_ROCDECODE),
 
     NEAREST_NEIGHBOR_INTERPOLATION: ("NEAREST_NEIGHBOR_INTERPOLATION", NEAREST_NEIGHBOR_INTERPOLATION),
     LINEAR_INTERPOLATION: ("LINEAR_INTERPOLATION", LINEAR_INTERPOLATION),
