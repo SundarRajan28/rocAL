@@ -29,6 +29,14 @@ import jax.dlpack
 import jax.numpy as jnp
 from jax.sharding import NamedSharding, PositionalSharding, Sharding
 
+try:
+    from clu.data.dataset_iterator import ArraySpec, ElementSpec
+    CLU_FOUND = True
+except ImportError:
+    CLU_FOUND = False
+
+import threading
+import concurrent.futures
 import numpy as np
 from packaging.version import Version
 
@@ -78,11 +86,13 @@ class ROCALJaxIterator(object):
                 sharding, (NamedSharding, PositionalSharding)
             ), "`sharding` should be an instance of `NamedSharding` or `PositionalSharding`"
         self._sharding = sharding
+        self._is_data_available = False
 
     def next(self):
         return self.__next__()
 
     def __next__(self):
+        self._is_data_available = True
         pipeline_outputs = []
         for self.loader in self.pipelines:
             if self.loader.rocal_run() != 0:
@@ -193,3 +203,93 @@ class ROCALJaxIterator(object):
     def __del__(self):
         for self.loader in self.pipelines:
             b.rocalRelease(self.loader._handle)
+
+
+def get_spec_for_array(jax_array):
+    return ArraySpec(shape=jax_array.shape, dtype=jax_array.dtype)
+
+
+class ROCALPeekableIterator(ROCALJaxIterator):
+    if not CLU_FOUND:
+        print('Install CLU for peekable data iterator support')
+        raise ImportError
+
+    def __init__(self, pipelines, sharding=None):
+        """ROCALJaxIterator extended with peek functionality. Compatible with Google CLU PeekableIterator.
+         Reference: https://github.com/google/CommonLoopUtils/blob/main/clu/data/dataset_iterator.py
+        """
+        super().__init__(
+            pipelines,
+            sharding
+        )
+        self._mutex = threading.Lock()
+        self._pool = None
+        self._peek = None
+
+        self._element_spec = None
+
+    def _set_element_spec(self, outputs):
+        self._element_spec = [get_spec_for_array(output) for output in outputs]
+
+    def _assert_output_shape_and_type(self, outputs):
+        if self._element_spec is None:
+            # Set element spec based on the first seen element
+            self._set_element_spec(outputs)
+
+        for idx, _ in enumerate(outputs):
+            if get_spec_for_array(outputs[idx]) != self._element_spec[idx]:
+                raise ValueError(
+                    "The shape or type of the output changed between iterations. "
+                    "This is not supported by JAX  peekable iterator. "
+                    "Please make sure that the shape and type of the output is constant. "
+                    f"Expected: {self._element_spec[idx]}, got: {get_spec_for_array(outputs[idx])} "
+                    f"for output: {idx}"
+                )
+
+        return outputs
+
+    def _next_with_peek_impl(self):
+        """Returns the next element from the iterator and advances the iterator.
+        """
+        if self._peek is None:
+            return self._assert_output_shape_and_type(super().__next__())
+        peek = self._peek
+        self._peek = None
+        return self._assert_output_shape_and_type(peek)
+
+    def __next__(self):
+        with self._mutex:
+            return self._next_with_peek_impl()
+
+    def __iter__(self):
+        if self._is_data_available and self._peek is None:
+            self.reset()
+        return self
+
+    def peek(self):
+        """Returns the next element from the iterator without advancing the iterator.
+        """
+        with self._mutex:
+            if self._peek is None:
+                self._peek = self._next_with_peek_impl()
+            return self._peek
+
+    def peek_async(self):
+        """Returns future that will return the next element from
+        the iterator without advancing the iterator.
+        """
+        if self._pool is None:
+            # Create pool only if needed (peek_async is ever called)
+            # to avoid thread creation overhead
+            self._pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+        future = self._pool.submit(self.peek)
+        return future
+
+    @property
+    def element_spec(self):
+        """Returns the element spec for the elements returned by the iterator.
+        """
+        if self._element_spec is None:
+            self._set_element_spec(self.peek())
+        return self._element_spec
