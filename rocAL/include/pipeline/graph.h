@@ -33,6 +33,8 @@ class Graph {
     Status verify();
     Status process();
     Status release();
+    Status schedule();
+    Status wait();
     vx_graph get() { return _graph; }
 
    private:
