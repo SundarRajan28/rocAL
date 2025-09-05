@@ -29,16 +29,6 @@ import cv2
 import numpy as np
 
 
-def random_augmentation(probability, augmented, original):
-    import random
-    condition = random.random() < probability
-    neg_condition = condition ^ True
-    return condition * augmented + neg_condition * original
-
-def brightness_fn(img):
-    brightness_scale = random_augmentation(0.5, random.uniform(0.7, 1.3), 1.0)
-    return (img * brightness_scale).astype(np.uint8)  # Casting is needed since it will return fp64 outputs otherwise
-
 def crop_fn(img, crop_size):
     return img[:, :crop_size[0], :crop_size[1], :]    # Crop along the height and width dimensions
 
@@ -49,47 +39,15 @@ def flip_fn(img):
     else:
         return img
 
-def overlay_images_numpy(image1, image2, alpha=0.5):
-    """
-    Overlays two images of shape NHWC using alpha blending.
-
-    Args:
-        image1 (np.ndarray): The first image array (NHWC).
-        image2 (np.ndarray): The second image array (NHWC).
-        alpha (float): The blending factor, where 0.0 means only image1
-                       is shown and 1.0 means only image2 is shown.
-                       Must be between 0.0 and 1.0.
-
-    Returns:
-        np.ndarray: The blended image array (NHWC).
-    """
-    # [Inference] The function assumes both images have the same shape.
-    if image1.shape != image2.shape:
-        raise ValueError("Both images must have the same shape.")
-
-    # Ensure the alpha value is within the valid range.
-    if not 0.0 <= alpha <= 1.0:
-        raise ValueError("Alpha value must be between 0.0 and 1.0.")
-
-    # Perform the weighted average to blend the images.
-    # We use a float type for the calculation to avoid overflow issues.
-    blended_image = (image1.astype(np.float32) * (1.0 - alpha) + 
-                     image2.astype(np.float32) * alpha)
-
-    # Convert the result back to the original data type (e.g., uint8)
-    # and clamp the values to the valid range [0, 255].
-    blended_image = np.clip(blended_image, 0, 255).astype(image1.dtype)
-
-    return blended_image
-
-class NormalizeWithStats:
-    def __init__(self, mean, std):
-        self.mean = np.array(mean).reshape(1, 1, 1, -1)
-        self.std = np.array(std).reshape(1, 1, 1, -1)
-    
-    def __call__(self, batch):
-        # Normalize using user passed mean and std
-        return ((batch - self.mean) / self.std).astype(np.float32)  # Casting is needed since it will return fp64 outputs otherwise
+def blend_images(image1, image2):
+    # Overlays image2 onto image1 in a circular mask for NHWC arrays.
+    assert image1.shape == image2.shape
+    n, h, w, c = image1.shape
+    y, x = np.ogrid[0:h, 0:w]                               # Create the coordinate grids
+    mask = (x - w / 2) ** 2 + (y - h / 2) ** 2 > h * w / 9  # Create the circular mask
+    result1 = np.copy(image1)
+    result1[:, mask, :] = image2[:, mask, :]
+    return result1
 
 def draw_patches(image, idx, layout="nchw", dtype="fp32", device="cpu"):
     # image is expected as a numpy array
@@ -99,7 +57,7 @@ def draw_patches(image, idx, layout="nchw", dtype="fp32", device="cpu"):
         image = image.astype("uint8")
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     cv2.imwrite("output_folder/python_function/" + str(idx) +
-                "_" + "train" + ".png", image*255)
+                "_" + "train" + ".png", image)
 
 
 def main():
@@ -117,23 +75,19 @@ def main():
     rocal_cpu = True  # Only supported for Host backend
     batch_size = int(sys.argv[2])
     random_seed = random.SystemRandom().randint(0, 2**32 - 1)
-
     local_rank = 0
     world_size = 1
-    normalizer = NormalizeWithStats(mean=[0.485 * 255, 0.456 * 255, 0.406 * 255],
-                                        std=[0.229 * 255, 0.224 * 255, 0.225 * 255])
+
     crop_image_fn = partial(crop_fn, crop_size=(224, 224))
-    # Pipeline example with random brightness + crop + hflip + normalize
+    # Pipeline example with crop + hflip + blend augmentations
     pipe = Pipeline(batch_size=batch_size, num_threads=8, device_id=local_rank,
-                                                   seed=random_seed, rocal_cpu=rocal_cpu, tensor_layout=types.NHWC, tensor_dtype=types.FLOAT16)
+                                                   seed=random_seed, rocal_cpu=rocal_cpu, tensor_layout=types.NHWC, tensor_dtype=types.UINT8)
     with pipe:
         jpegs, _ = fn.readers.file(file_root=data_path)
         decode = fn.decoders.image(jpegs, file_root=data_path, output_type=types.RGB, shard_id=local_rank, num_shards=world_size, random_shuffle=False)
-        rand_brightness_output = fn.python_function(decode, function = brightness_fn, dtype=types.UINT8, layout=types.NHWC)
-        blend_output = fn.python_function(decode, rand_brightness_output, function = overlay_images_numpy, output_dims=(1000, 1000, 3), dtype=types.UINT8, layout=types.NHWC)
-        # cropped_output = fn.python_function(rand_brightness_output, function = crop_image_fn, output_dims=(224, 224, 3), dtype=types.UINT8, layout=types.NHWC)
-        # flipped_output = fn.python_function(cropped_output, function = flip_fn, dtype=types.UINT8, layout=types.NHWC)
-        # normalized_output = fn.python_function(flipped_output, function = normalizer, dtype=types.FLOAT, layout=types.NHWC)
+        cropped_output = fn.python_function(decode, function = crop_image_fn, output_dims=(224, 224, 3), dtype=types.UINT8, layout=types.NHWC)
+        flipped_output = fn.python_function(cropped_output, function = flip_fn, output_dims=(224, 224, 3), dtype=types.UINT8, layout=types.NHWC)
+        blend_output = fn.python_function(cropped_output, flipped_output, function = blend_images, output_dims=(224, 224, 3), dtype=types.UINT8, layout=types.NHWC)
         pipe.set_outputs(blend_output)
     pipe.build()
     
