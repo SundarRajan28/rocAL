@@ -34,7 +34,7 @@ def crop_fn(img, crop_size):
 
 def flip_fn(img):
     rand_prob = random.random()
-    if rand_prob < 0.5:
+    if rand_prob > 0.3:
         return img[:, :, ::-1, :]
     else:
         return img

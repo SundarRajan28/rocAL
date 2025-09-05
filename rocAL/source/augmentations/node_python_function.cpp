@@ -49,10 +49,7 @@ void PythonFunctionNode::create_node() {
     // Scalars
     vx_scalar function_id_vx = vxCreateScalar(vx_ctx, VX_TYPE_UINT64, &_function_id);
 
-    int input_layout = static_cast<int>(_inputs[0]->info().layout());
     int output_layout = static_cast<int>(_outputs[0]->info().layout());
-
-    vx_scalar input_layout_vx = vxCreateScalar(vx_ctx, VX_TYPE_INT32, &input_layout);
     vx_scalar output_layout_vx = vxCreateScalar(vx_ctx, VX_TYPE_INT32, &output_layout);
     
     // Choose bridge function based on number of inputs
@@ -66,6 +63,20 @@ void PythonFunctionNode::create_node() {
         srcs.push_back(t->handle());
     }
     vx_uint32 numInputs = static_cast<vx_uint32>(_inputs.size());
+
+    // Build per-input layouts array (INT32), length = numInputs
+    std::vector<vx_int32> input_layouts;
+    input_layouts.reserve(numInputs);
+    for (vx_uint32 i = 0; i < numInputs; ++i) {
+        input_layouts.push_back(static_cast<vx_int32>(_inputs[i]->info().layout()));
+    }
+    vx_array input_layouts_vx = vxCreateArray(vx_ctx, VX_TYPE_INT32, numInputs);
+    vx_status status = VX_SUCCESS;
+    status |= vxAddArrayItems(input_layouts_vx, input_layouts.size(), input_layouts.data(), sizeof(vx_float32));
+    if (status != 0)
+        THROW(" vxAddArrayItems failed in the PythonFunction node (vxExtPythonFunction) node: " + TOSTR(status))
+    
+    // Create the node
     _node = vxExtPythonFunction(
         _graph->get(),
         srcs.data(),
@@ -73,10 +84,9 @@ void PythonFunctionNode::create_node() {
         _outputs[0]->handle(),
         bridge_fn_ptr_vx,
         function_id_vx,
-        input_layout_vx,
+        input_layouts_vx,
         output_layout_vx);
 
-    vx_status status;
     if ((status = vxGetStatus((vx_reference)_node)) != VX_SUCCESS) {
         THROW("Adding the PythonFunction node failed: " + TOSTR(status));
     }
