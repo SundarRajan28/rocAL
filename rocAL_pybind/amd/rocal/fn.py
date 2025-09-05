@@ -1290,7 +1290,7 @@ def python_function(*inputs, function, output_dims = [], dtype=None, layout=None
     - dtype defaults to Pipeline tensor dtype when not provided.
     - layout defaults to Pipeline tensor_layout when not provided.
     
-    @param inputs (list)                                    The input tensor to process
+    @param inputs (list)                                    The input tensor(s) to process. The function will receive each tensor as a separate argument.
     @param function (callable)                              Python function to apply to the batch
     @param output_dims (list, optional, default = [])       Output tensor dimensions (defaults to input tensor dimensions if not provided for single input)
     @param dtype (type, optional, default = None)           Output data type (defaults to pipeline dtype)
@@ -1300,10 +1300,17 @@ def python_function(*inputs, function, output_dims = [], dtype=None, layout=None
     
     Examples
     --------
+    Single input:
     >>> def custom_transform(batch):
     ...     return (batch * 2.0 + 1.0).astype(np.float32)
-    >>> 
+    >>>
     >>> output = fn.python_function(input_tensor, function=custom_transform, dtype=types.FLOAT)
+
+    Multiple inputs:
+    >>> def blend(batch1, batch2):
+    ...     return (0.5 * batch1 + 0.5 * batch2).astype(np.uint8)
+    >>>
+    >>> output = fn.python_function(input1, input2, function=blend, output_dims=[224, 224, 3])
     
     Notes
     -----
@@ -1319,18 +1326,6 @@ def python_function(*inputs, function, output_dims = [], dtype=None, layout=None
     # Validate that function is callable
     if not callable(function):
         raise TypeError(f"Expected callable function, got {type(function).__name__}")
-    
-    # Validate function has correct signature (accepts one argument)
-    import inspect
-    try:
-        sig = inspect.signature(function)
-    except (ValueError, TypeError):
-        # If we can't inspect, we'll let it fail at runtime
-        pass
-    else:
-        params = list(sig.parameters.values())
-        if not params:
-            raise ValueError("Python function must accept at least one argument (the input batch)")
     
     function_id = id(function)
     # Pin the callable to prevent GC; backend uses raw id(pointer)

@@ -170,17 +170,12 @@ vx_status rocal_process_python_function(void** src_ptrs, void* dst_ptr, const Ro
         }
 
         // Call the python function with multiple inputs
-        py::object result_obj;
-        if (params->num_inputs == 1) {
-            result_obj = python_function(input_arrays[0]);
-        } else {
-            // Build a Python tuple of arguments explicitly (positional args)
-            py::tuple input_tuple(params->num_inputs);
-            for (uint32_t i = 0; i < params->num_inputs; ++i) {
-                input_tuple[i] = input_arrays[i];
-            }
-            result_obj = python_function(*input_tuple);
+        // Build a Python tuple of arguments explicitly (positional args)
+        py::tuple input_tuple(params->num_inputs);
+        for (uint32_t i = 0; i < params->num_inputs; ++i) {
+            input_tuple[i] = input_arrays[i];
         }
+        py::object result_obj = python_function(*input_tuple);
 
         // Ensure contiguous result for memcpy
         py::array result_array = py::cast<py::array>(result_obj);
