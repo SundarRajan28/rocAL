@@ -70,12 +70,7 @@ Returns:
 - VX_ERROR_NOT_IMPLEMENTED if device_type is GPU or environment cannot execute
 - VX_ERROR_INVALID_REFERENCE if src_ptrs, dst_ptr, or params is null
 */
-vx_status rocal_process_python_function_multi(void** src_ptrs, void* dst_ptr, const RocalPyExecParams* params);
-
-/*
-Legacy single-input function for backward compatibility
-*/
-vx_status rocal_process_python_function(void* src_ptr, void* dst_ptr, const RocalPyExecParams* params);
+vx_status rocal_process_python_function(void** src_ptrs, void* dst_ptr, const RocalPyExecParams* params);
 
 #ifdef __cplusplus
 }

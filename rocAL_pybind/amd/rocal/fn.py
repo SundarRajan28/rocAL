@@ -1342,13 +1342,9 @@ def python_function(*inputs, function, output_dims = [], dtype=None, layout=None
         layout = Pipeline._current_pipeline._tensor_layout
     if dtype is None:
         dtype = Pipeline._current_pipeline._tensor_dtype
-    if (len(inputs) != 1) and (len(output_dims) == 0):
+    if (len(inputs) > 1) and (len(output_dims) == 0):
         raise ValueError("python_function with multiple inputs requires output_dims to be provided")
     
-    if len(inputs) == 1:
-        kwargs_pybind = {"input_image": inputs[0], "function_id": function_id, "output_dims": output_dims, "layout": layout, "dtype": dtype, "is_output": False}
-        output = b.pythonFunction(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
-    else:
-        kwargs_pybind = {"input_image": inputs, "function_id": function_id, "output_dims": output_dims, "layout": layout, "dtype": dtype, "is_output": False}
-        output = b.pythonFunctionMultiInput(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    kwargs_pybind = {"input_image": inputs, "function_id": function_id, "output_dims": output_dims, "layout": layout, "dtype": dtype, "is_output": False}
+    output = b.pythonFunction(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return output

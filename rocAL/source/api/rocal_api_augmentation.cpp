@@ -2441,49 +2441,6 @@ RocalTensor rocalLog1p(RocalContext p_context,
 
 RocalTensor ROCAL_API_CALL
 rocalPythonFunction(
-        RocalContext p_context,
-        RocalTensor p_input,
-        unsigned long long function_id,
-        std::vector<size_t> output_dims,
-        RocalTensorLayout output_layout,
-        RocalTensorOutputType output_datatype,
-        bool is_output)
-{
-    Tensor* output = nullptr;
-    ROCAL_INVALID_CONTEXT_ERR(p_context, output);
-    ROCAL_INVALID_INPUT_ERR(p_input, output);
-    auto context = static_cast<Context*>(p_context);
-    auto input   = static_cast<Tensor*>(p_input);
-    try {
-#ifdef ROCAL_PYTHON
-        RocalTensorDataType op_tensor_datatype = static_cast<RocalTensorDataType>(output_datatype);
-        RocalTensorlayout op_tensor_layout = static_cast<RocalTensorlayout>(output_layout);
-
-        TensorInfo output_info = input->info();
-        output_info.set_data_type(op_tensor_datatype);
-        output_info.set_tensor_layout(op_tensor_layout);
-        // If explicit output dims provided (excluding batch), create output tensor
-        if(!output_dims.empty()) {
-            std::vector<size_t> dims = output_info.dims();
-            for (int i = 1; i < dims.size(); i++)
-                dims[i] = output_dims[i - 1];
-            if(dims != output_info.dims())
-                output_info.set_dims(dims);  // Only modify output tensor dims if it do not match with the user specified dims
-        }
-
-        output = context->master_graph->create_tensor(output_info, is_output);
-        context->master_graph->add_node<PythonFunctionNode>({input}, {output})->init(function_id);
-#else
-        THROW("PythonFunction node is not enabled since python/pybind11 is not present")
-#endif
-    } catch (const std::exception& e) {
-        ROCAL_PRINT_EXCEPTION(context, e);
-    }
-    return output;
-}
-
-RocalTensor ROCAL_API_CALL
-rocalPythonFunctionMultiInput(
     RocalContext p_context,
     std::vector<RocalTensor> inputs,
     unsigned long long function_id,
@@ -2507,24 +2464,31 @@ rocalPythonFunctionMultiInput(
 
     try {
 #ifdef ROCAL_PYTHON
+        TensorInfo output_info;
         RocalTensorDataType op_tensor_datatype = static_cast<RocalTensorDataType>(output_datatype);
         RocalTensorlayout op_tensor_layout = static_cast<RocalTensorlayout>(output_layout);
 
-        // If explicit output dims provided (excluding batch), create output tensor
         if (!output_dims.empty()) {
+            // If explicit output dims are provided (excluding batch), create output tensor
             std::vector<size_t> dims(output_dims.size() + 1);
             dims[0] = context->user_batch_size();
             for (int i = 1; i < dims.size(); i++)
                 dims[i] = output_dims[i - 1];
-            auto info = TensorInfo(std::vector<size_t>(std::move(dims)),
+            output_info = TensorInfo(std::vector<size_t>(std::move(dims)),
                                    context->master_graph->mem_type(),
                                    op_tensor_datatype,
-                                   op_tensor_layout);
-            output = context->master_graph->create_tensor(info, is_output);
-            context->master_graph->add_node<PythonFunctionNode>(input_tensors, {output})->init(function_id);
+                                   op_tensor_layout);            
+        } else if (inputs.size() == 1) {
+            // Default output tensor info: mirror the input info
+            output_info = input_tensors.front()->info();
+            output_info.set_data_type(op_tensor_datatype);
+            output_info.set_tensor_layout(op_tensor_layout);
         } else {
-            THROW("Output dims must be passed for rocalPythonFunctionMultiInput")
+            THROW("Output dims must be passed for multiple inputs")
         }
+
+        output = context->master_graph->create_tensor(output_info, is_output);
+        context->master_graph->add_node<PythonFunctionNode>(input_tensors, {output})->init(function_id);
 #else
         THROW("PythonFunction node is not enabled since python/pybind11 is not present")
 #endif
