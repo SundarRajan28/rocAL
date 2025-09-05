@@ -1286,13 +1286,13 @@ def python_function(*inputs, function, output_dims = [], dtype=None, layout=None
     The callable is identified by its Python id() and executed in the backend kernel.
     - Input is exposed as a NumPy view of the batch (no copy for input).
     - The callable must return a NumPy array with matching batch size.
-    - output_dims defaults to input tensor dimensions when not provided.
+    - output_dims defaults to input tensor dimensions when not provided. Should be provided if there are multiple inputs
     - dtype defaults to Pipeline tensor dtype when not provided.
     - layout defaults to Pipeline tensor_layout when not provided.
     
     @param inputs (list)                                    The input tensor to process
     @param function (callable)                              Python function to apply to the batch
-    @param output_dims (list, optional, default = [])       Output tensor dimensions (defaults to input tensor dimensions if not provided)
+    @param output_dims (list, optional, default = [])       Output tensor dimensions (defaults to input tensor dimensions if not provided for single input)
     @param dtype (type, optional, default = None)           Output data type (defaults to pipeline dtype)
     @param layout (type, optional, default = None)          Output tensor layout (defaults to pipeline layout)
     
@@ -1342,7 +1342,13 @@ def python_function(*inputs, function, output_dims = [], dtype=None, layout=None
         layout = Pipeline._current_pipeline._tensor_layout
     if dtype is None:
         dtype = Pipeline._current_pipeline._tensor_dtype
-        
-    kwargs_pybind = {"input_image": inputs[0], "function_id": function_id, "output_dims": output_dims, "layout": layout, "dtype": dtype, "is_output": False}
-    output = b.pythonFunction(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    if (len(inputs) != 1) and (len(output_dims) == 0):
+        raise ValueError("python_function with multiple inputs requires output_dims to be provided")
+    
+    if len(inputs) == 1:
+        kwargs_pybind = {"input_image": inputs[0], "function_id": function_id, "output_dims": output_dims, "layout": layout, "dtype": dtype, "is_output": False}
+        output = b.pythonFunction(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    else:
+        kwargs_pybind = {"input_image": inputs, "function_id": function_id, "output_dims": output_dims, "layout": layout, "dtype": dtype, "is_output": False}
+        output = b.pythonFunctionMultiInput(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return output

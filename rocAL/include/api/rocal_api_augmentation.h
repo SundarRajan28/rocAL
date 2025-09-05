@@ -1374,4 +1374,17 @@ extern "C" RocalTensor ROCAL_API_CALL rocalLog1p(RocalContext p_context,
 
 extern "C" RocalTensor ROCAL_API_CALL rocalPythonFunction(RocalContext context, RocalTensor input, unsigned long long function_id, std::vector<size_t> output_dims, RocalTensorLayout output_layout, RocalTensorOutputType output_datatype, bool is_output);
 
+/*! \brief Invokes a user supplied Python callable on the entire batch with multiple inputs (host/CPU only).
+ * \ingroup group_rocal_augmentations
+ * \param [in] context Rocal context
+ * \param [in] inputs Vector of input Rocal tensors to process
+ * \param [in] function_id Python function ID (id() of the callable)
+ * \param [in] output_dims Output tensor dimensions (defaults to first input tensor dimensions if empty)
+ * \param [in] output_layout Output tensor layout (defaults to pipeline layout)
+ * \param [in] output_datatype Output data type (defaults to pipeline dtype)
+ * \param [in] is_output is the output tensor part of the graph output
+ * \return RocalTensor
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalPythonFunctionMultiInput(RocalContext context, std::vector<RocalTensor> inputs, unsigned long long function_id, std::vector<size_t> output_dims, RocalTensorLayout output_layout, RocalTensorOutputType output_datatype, bool is_output);
+
 #endif  // MIVISIONX_ROCAL_API_AUGMENTATION_H

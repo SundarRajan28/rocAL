@@ -2480,3 +2480,48 @@ rocalPythonFunction(
     }
     return output;
 }
+
+RocalTensor ROCAL_API_CALL
+rocalPythonFunctionMultiInput(
+    RocalContext p_context,
+    std::vector<RocalTensor> inputs,
+    unsigned long long function_id,
+    std::vector<size_t> output_dims,
+    RocalTensorLayout output_layout,
+    RocalTensorOutputType output_datatype,
+    bool is_output)
+{
+    Tensor* output = nullptr;
+    ROCAL_INVALID_CONTEXT_ERR(p_context, output);
+    for (auto &p_input: inputs)
+        ROCAL_INVALID_INPUT_ERR(p_input, output);
+    auto context = static_cast<Context*>(p_context);
+    std::vector<Tensor*> input_tensors;
+    std::transform(inputs.begin(), inputs.end(), input_tensors.begin(),
+        [](auto tensor) { return static_cast<Tensor*>(tensor); }
+    );
+    try {
+#ifdef ROCAL_PYTHON
+        RocalTensorDataType op_tensor_datatype = static_cast<RocalTensorDataType>(output_datatype);
+        RocalTensorlayout op_tensor_layout = static_cast<RocalTensorlayout>(output_layout);
+
+        std::vector<size_t> dims(output_dims.size() + 1);
+        dims[0] = context->user_batch_size();
+        for (int i = 1; i < dims.size(); i++)
+            dims[i] = output_dims[i - 1];
+        auto info = TensorInfo(dims,
+                               context->master_graph->mem_type(),
+                               op_tensor_datatype);
+        info.set_tensor_layout(op_tensor_layout);
+        info.set_dims(dims);
+
+        output = context->master_graph->create_tensor(info, is_output);
+        context->master_graph->add_node<PythonFunctionNode>(input_tensors, {output})->init(function_id);
+#else
+        THROW("PythonFunction node is not enabled since python/pybind11 is not present")
+#endif
+    } catch (const std::exception& e) {
+        ROCAL_PRINT_EXCEPTION(context, e);
+    }
+    return output;
+}

@@ -1188,5 +1188,7 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
            py::return_value_policy::reference);
     m.def("pythonFunction", &rocalPythonFunction,
            py::return_value_policy::reference);
+    m.def("pythonFunctionMultiInput", &rocalPythonFunctionMultiInput,
+           py::return_value_policy::reference);
 }
 }  // namespace rocal
