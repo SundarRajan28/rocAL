@@ -26,6 +26,7 @@ THE SOFTWARE.
 #ifdef ROCAL_PYTHON
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 #include <vx_ext_rpp.h>
 
 #include <cstdio>
@@ -63,18 +64,33 @@ void PythonFunctionNode::create_node() {
     }
     vx_scalar bridge_fn_ptr_vx = vxCreateScalar(vx_ctx, VX_TYPE_UINT64, &bridge_fn_ptr);
 
-    // Pass number of inputs to the kernel
-    int num_inputs = static_cast<int>(_inputs.size());
-    vx_scalar num_inputs_vx = vxCreateScalar(vx_ctx, VX_TYPE_INT32, &num_inputs);
 
-    _node = vxExtPythonFunction(
-        _graph->get(),
-        _inputs[0]->handle(),
-        _outputs[0]->handle(),
-        bridge_fn_ptr_vx,
-        function_id_vx,
-        input_layout_vx,
-        output_layout_vx);
+    if (_inputs.size() == 1) {
+        _node = vxExtPythonFunction(
+            _graph->get(),
+            _inputs[0]->handle(),
+            _outputs[0]->handle(),
+            bridge_fn_ptr_vx,
+            function_id_vx,
+            input_layout_vx,
+            output_layout_vx);
+    } else {
+        std::vector<vx_tensor> srcs;
+        srcs.reserve(_inputs.size());
+        for (auto* t : _inputs) {
+            srcs.push_back(t->handle());
+        }
+        vx_uint32 numInputs = static_cast<vx_uint32>(_inputs.size());
+        _node = vxExtPythonFunctionMulti(
+            _graph->get(),
+            srcs.data(),
+            numInputs,
+            _outputs[0]->handle(),
+            bridge_fn_ptr_vx,
+            function_id_vx,
+            input_layout_vx,
+            output_layout_vx);
+    }
 
     vx_status status;
     if ((status = vxGetStatus((vx_reference)_node)) != VX_SUCCESS) {
@@ -176,8 +192,11 @@ vx_status rocal_process_python_function_multi(void** src_ptrs, void* dst_ptr, co
         if (params->num_inputs == 1) {
             result_obj = python_function(input_arrays[0]);
         } else {
-            // Convert vector to tuple for multiple arguments
-            py::tuple input_tuple = py::cast(input_arrays);
+            // Build a Python tuple of arguments explicitly (positional args)
+            py::tuple input_tuple(params->num_inputs);
+            for (uint32_t i = 0; i < params->num_inputs; ++i) {
+                input_tuple[i] = input_arrays[i];
+            }
             result_obj = python_function(*input_tuple);
         }
 

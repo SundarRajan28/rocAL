@@ -2462,6 +2462,7 @@ rocalPythonFunction(
         TensorInfo output_info = input->info();
         output_info.set_data_type(op_tensor_datatype);
         output_info.set_tensor_layout(op_tensor_layout);
+        // If explicit output dims provided (excluding batch), create output tensor
         if(!output_dims.empty()) {
             std::vector<size_t> dims = output_info.dims();
             for (int i = 1; i < dims.size(); i++)
@@ -2496,27 +2497,34 @@ rocalPythonFunctionMultiInput(
     for (auto &p_input: inputs)
         ROCAL_INVALID_INPUT_ERR(p_input, output);
     auto context = static_cast<Context*>(p_context);
+
+    // Convert opaque handles to Tensor* safely
     std::vector<Tensor*> input_tensors;
-    std::transform(inputs.begin(), inputs.end(), input_tensors.begin(),
-        [](auto tensor) { return static_cast<Tensor*>(tensor); }
-    );
+    input_tensors.reserve(inputs.size());
+    for (auto t : inputs) {
+        input_tensors.push_back(static_cast<Tensor*>(t));
+    }
+
     try {
 #ifdef ROCAL_PYTHON
         RocalTensorDataType op_tensor_datatype = static_cast<RocalTensorDataType>(output_datatype);
         RocalTensorlayout op_tensor_layout = static_cast<RocalTensorlayout>(output_layout);
 
-        std::vector<size_t> dims(output_dims.size() + 1);
-        dims[0] = context->user_batch_size();
-        for (int i = 1; i < dims.size(); i++)
-            dims[i] = output_dims[i - 1];
-        auto info = TensorInfo(dims,
-                               context->master_graph->mem_type(),
-                               op_tensor_datatype);
-        info.set_tensor_layout(op_tensor_layout);
-        info.set_dims(dims);
-
-        output = context->master_graph->create_tensor(info, is_output);
-        context->master_graph->add_node<PythonFunctionNode>(input_tensors, {output})->init(function_id);
+        // If explicit output dims provided (excluding batch), create output tensor
+        if (!output_dims.empty()) {
+            std::vector<size_t> dims(output_dims.size() + 1);
+            dims[0] = context->user_batch_size();
+            for (int i = 1; i < dims.size(); i++)
+                dims[i] = output_dims[i - 1];
+            auto info = TensorInfo(std::vector<size_t>(std::move(dims)),
+                                   context->master_graph->mem_type(),
+                                   op_tensor_datatype,
+                                   op_tensor_layout);
+            output = context->master_graph->create_tensor(info, is_output);
+            context->master_graph->add_node<PythonFunctionNode>(input_tensors, {output})->init(function_id);
+        } else {
+            THROW("Output dims must be passed for rocalPythonFunctionMultiInput")
+        }
 #else
         THROW("PythonFunction node is not enabled since python/pybind11 is not present")
 #endif

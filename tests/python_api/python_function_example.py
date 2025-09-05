@@ -49,6 +49,39 @@ def flip_fn(img):
     else:
         return img
 
+def overlay_images_numpy(image1, image2, alpha=0.5):
+    """
+    Overlays two images of shape NHWC using alpha blending.
+
+    Args:
+        image1 (np.ndarray): The first image array (NHWC).
+        image2 (np.ndarray): The second image array (NHWC).
+        alpha (float): The blending factor, where 0.0 means only image1
+                       is shown and 1.0 means only image2 is shown.
+                       Must be between 0.0 and 1.0.
+
+    Returns:
+        np.ndarray: The blended image array (NHWC).
+    """
+    # [Inference] The function assumes both images have the same shape.
+    if image1.shape != image2.shape:
+        raise ValueError("Both images must have the same shape.")
+
+    # Ensure the alpha value is within the valid range.
+    if not 0.0 <= alpha <= 1.0:
+        raise ValueError("Alpha value must be between 0.0 and 1.0.")
+
+    # Perform the weighted average to blend the images.
+    # We use a float type for the calculation to avoid overflow issues.
+    blended_image = (image1.astype(np.float32) * (1.0 - alpha) + 
+                     image2.astype(np.float32) * alpha)
+
+    # Convert the result back to the original data type (e.g., uint8)
+    # and clamp the values to the valid range [0, 255].
+    blended_image = np.clip(blended_image, 0, 255).astype(image1.dtype)
+
+    return blended_image
+
 class NormalizeWithStats:
     def __init__(self, mean, std):
         self.mean = np.array(mean).reshape(1, 1, 1, -1)
@@ -97,10 +130,11 @@ def main():
         jpegs, _ = fn.readers.file(file_root=data_path)
         decode = fn.decoders.image(jpegs, file_root=data_path, output_type=types.RGB, shard_id=local_rank, num_shards=world_size, random_shuffle=False)
         rand_brightness_output = fn.python_function(decode, function = brightness_fn, dtype=types.UINT8, layout=types.NHWC)
-        cropped_output = fn.python_function(rand_brightness_output, function = crop_image_fn, output_dims=(224, 224, 3), dtype=types.UINT8, layout=types.NHWC)
-        flipped_output = fn.python_function(cropped_output, function = flip_fn, dtype=types.UINT8, layout=types.NHWC)
-        normalized_output = fn.python_function(flipped_output, function = normalizer, dtype=types.FLOAT, layout=types.NHWC)
-        pipe.set_outputs(normalized_output)
+        blend_output = fn.python_function(decode, rand_brightness_output, function = overlay_images_numpy, output_dims=(1000, 1000, 3), dtype=types.UINT8, layout=types.NHWC)
+        # cropped_output = fn.python_function(rand_brightness_output, function = crop_image_fn, output_dims=(224, 224, 3), dtype=types.UINT8, layout=types.NHWC)
+        # flipped_output = fn.python_function(cropped_output, function = flip_fn, dtype=types.UINT8, layout=types.NHWC)
+        # normalized_output = fn.python_function(flipped_output, function = normalizer, dtype=types.FLOAT, layout=types.NHWC)
+        pipe.set_outputs(blend_output)
     pipe.build()
     
     # Dataloader
