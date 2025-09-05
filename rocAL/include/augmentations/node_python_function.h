@@ -28,7 +28,49 @@ THE SOFTWARE.
 #include "pipeline/node.h"
 #include "parameters/parameter_factory.h"
 #include "parameters/parameter_vx.h"
-#include "rocAL_python_bridge.h"
+
+#ifndef ROCAL_PY_MAX_TENSOR_DIMS
+#define ROCAL_PY_MAX_TENSOR_DIMS 8
+#endif
+
+#ifndef ROCAL_PY_MAX_INPUTS
+#define ROCAL_PY_MAX_INPUTS 8
+#endif
+
+typedef struct RocalPyTensorDesc_ {
+    size_t num_dims;                          /* e.g., 4 for [N,H,W,C] */
+    size_t shape[ROCAL_PY_MAX_TENSOR_DIMS];   /* lengths per dimension */
+    size_t strides[ROCAL_PY_MAX_TENSOR_DIMS]; /* strides in elements */
+    vx_enum dtype;                            /* OpenVX scalar type enum */
+    int layout;                               /* matches rocAL/vx tensor layout enums */
+} RocalPyTensorDesc;
+
+typedef struct RocalPyExecParams_ {
+    uint64_t function_id;        /* CPython id(function), provided by python front-end */
+    uint32_t num_inputs;         /* Number of input tensors */
+    RocalPyTensorDesc in_desc[ROCAL_PY_MAX_INPUTS];  /* Input tensor descriptions */
+    RocalPyTensorDesc out_desc;  /* Output tensor description */
+    uint32_t device_type;        /* AGO_TARGET_AFFINITY_{CPU,GPU}; currently CPU-only */
+} RocalPyExecParams;
+
+/*
+Execute the provided Python callable on batched views of src_ptrs described by
+params->in_desc. The callable must return a NumPy array matching params->out_desc
+(shape, ndim, dtype). The result will be copied into dst_ptr.
+
+Parameters:
+- src_ptrs: Array of input tensor data pointers (length = params->num_inputs)
+- dst_ptr: Output tensor data pointer
+- params: Execution parameters including function ID and tensor descriptions
+
+Returns:
+- VX_SUCCESS on success
+- VX_ERROR_INVALID_DIMENSION / VX_ERROR_INVALID_TYPE on validation mismatch
+- VX_FAILURE for runtime Python exceptions
+- VX_ERROR_NOT_IMPLEMENTED if device_type is GPU or environment cannot execute
+- VX_ERROR_INVALID_REFERENCE if src_ptrs, dst_ptr, or params is null
+*/
+vx_status rocal_process_python_function(void** src_ptrs, void* dst_ptr, const RocalPyExecParams* params);
 
 class PythonFunctionNode : public Node {
    public:

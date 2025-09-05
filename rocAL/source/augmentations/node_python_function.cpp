@@ -88,8 +88,6 @@ void PythonFunctionNode::init(unsigned long long function_id) {
 
 void PythonFunctionNode::update_node() {}
 
-// C ABI bridge implementation for executing Python callables.
-// This is exported by rocAL and called by external consumers (e.g., MIVisionX OpenVX kernel).
 namespace {
 static std::pair<std::string, size_t> numpy_type_from_vx(vx_enum type) {
     switch (type) {
