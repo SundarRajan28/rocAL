@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include <cstring>
 #include <string>
 #include <vector>
+#include <sstream>
 
 namespace py = pybind11;
 
@@ -234,10 +235,26 @@ vx_status rocal_process_python_function(void** src_ptrs, void* dst_ptr, const Ro
             }
         }
 
-        // Copy to destination
-        size_t total_bytes = static_cast<size_t>(buf.itemsize);
-        for (auto dim : buf.shape) total_bytes *= static_cast<size_t>(dim);
-        std::memcpy(dst_ptr, buf.ptr, total_bytes);
+        // Calculate expected destination buffer size
+        size_t dst_total_bytes = out_itemsize;
+        for (size_t i = 0; i < out_ndim; ++i) {
+            dst_total_bytes *= params->out_desc.shape[i];
+        }
+
+        // Calculate actual output buffer size
+        size_t output_total_bytes = static_cast<size_t>(buf.itemsize);
+        for (auto dim : buf.shape) output_total_bytes *= static_cast<size_t>(dim);
+
+        // Validate destination buffer has enough memory
+        if (output_total_bytes > dst_total_bytes) {
+            std::stringstream ss;
+            ss << "Output buffer too small - expected at least " << output_total_bytes 
+               << " bytes, but destination has only " << dst_total_bytes << " bytes";
+            ERR(ss.str());
+            return VX_ERROR_INVALID_DIMENSION;
+        }
+
+        std::memcpy(dst_ptr, buf.ptr, output_total_bytes);
 
         // Explicitly drop references before releasing GIL
         result_contig = py::array();
