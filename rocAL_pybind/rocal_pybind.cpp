@@ -1125,6 +1125,20 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
           py::return_value_policy::reference);
     m.def("snpNoise", &rocalSnPNoise,
           py::return_value_policy::reference);
+    m.def("gaussianNoise", &rocalGaussianNoise,
+          py::return_value_policy::reference);
+    m.def("shotNoise", &rocalShotNoise,
+          py::return_value_policy::reference);
+    m.def("posterize", &rocalPosterize,
+          py::return_value_policy::reference);
+    m.def("solarize", &rocalSolarize,
+          py::return_value_policy::reference);
+    m.def("water", &rocalWater,
+          py::return_value_policy::reference);
+    m.def("jpegCompressionDistortion", &rocalJpegCompressionDistortion,
+          py::return_value_policy::reference);
+    m.def("lut", &rocalLUT,
+          py::return_value_policy::reference);
     m.def("exposure", &rocalExposure,
           py::return_value_policy::reference);
     m.def("pixelate", &rocalPixelate,
@@ -1164,6 +1178,10 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
     m.def("transpose", &rocalTranspose,
           py::return_value_policy::reference);
     m.def("log1p", &rocalLog1p,
-    py::return_value_policy::reference);
+          py::return_value_policy::reference);
+    m.def("log", &rocalLog,
+          py::return_value_policy::reference);
+    m.def("channelPermute", &rocalChannelPermute,
+          py::return_value_policy::reference);
 }
 }  // namespace rocal
