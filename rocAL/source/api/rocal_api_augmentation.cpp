@@ -2566,10 +2566,7 @@ RocalTensor rocalLog(RocalContext p_context,
     auto input = static_cast<Tensor*>(p_input);
     try {
         RocalTensorDataType op_tensor_data_type = static_cast<RocalTensorDataType>(input->data_type());
-        if (op_tensor_data_type != RocalTensorDataType::INT16) {
-            THROW("Log augmentation only supported for int16 inputs")
-        }
-        op_tensor_data_type = RocalTensorDataType::FP32;  // Log only supports F32 outputs so setting output dtype to F32
+        op_tensor_data_type = (op_tensor_data_type != RocalTensorDataType::FP16) ? RocalTensorDataType::FP16 : RocalTensorDataType::FP32;
         TensorInfo output_info = input->info();
         output_info.set_data_type(op_tensor_data_type);
         output = context->master_graph->create_tensor(output_info, is_output);

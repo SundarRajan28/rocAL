@@ -222,6 +222,25 @@ do
         ./unit_tests 2 "$coco_detection_path" "${output_path}ROIResize_${rgb_name[$rgb]}_${device_name}" $width $height 60 $device $rgb 1 $display
         ./unit_tests 2 "$coco_detection_path" "${output_path}Nop_${rgb_name[$rgb]}_${device_name}" $width $height 61 $device $rgb 1 $display
 
+        # Newly added augmentation tests - random variants
+        ./unit_tests 0 "$image_path" "${output_path}ChannelPermute_${rgb_name[$rgb]}_${device_name}" $width $height 64 $device $rgb 1 $display
+        ./unit_tests 2 "$coco_detection_path" "${output_path}GaussianNoise_${rgb_name[$rgb]}_${device_name}" $width $height 65 $device $rgb 1 $display
+        ./unit_tests 4 "$tf_classification_path" "${output_path}ShotNoise_${rgb_name[$rgb]}_${device_name}" $width $height 66 $device $rgb 1 $display
+        ./unit_tests 6 "$caffe_classification_path" "${output_path}JpegCompressionDistortion_${rgb_name[$rgb]}_${device_name}" $width $height 67 $device $rgb 1 $display
+        ./unit_tests 8 "$caffe2_classification_path" "${output_path}Log_${rgb_name[$rgb]}_${device_name}" $width $height 68 $device $rgb 1 $display
+        ./unit_tests 11 "$mxnet_path" "${output_path}LUT_${rgb_name[$rgb]}_${device_name}" $width $height 69 $device $rgb 1 $display
+        ./unit_tests 14 "$image_path" "${output_path}Posterize_${rgb_name[$rgb]}_${device_name}" $width $height 70 $device $rgb 1 $display
+        ./unit_tests 15 "$coco_detection_path" "${output_path}Solarize_${rgb_name[$rgb]}_${device_name}" $width $height 71 $device $rgb 1 $display
+        ./unit_tests 0 "$image_path" "${output_path}Water_${rgb_name[$rgb]}_${device_name}" $width $height 72 $device $rgb 1 $display
+
+        # Newly added augmentation tests - fixed variants
+        ./unit_tests 2 "$coco_detection_path" "${output_path}GaussianNoiseFixed_${rgb_name[$rgb]}_${device_name}" $width $height 73 $device $rgb 0 $display
+        ./unit_tests 4 "$tf_classification_path" "${output_path}ShotNoiseFixed_${rgb_name[$rgb]}_${device_name}" $width $height 74 $device $rgb 0 $display
+        ./unit_tests 6 "$caffe_classification_path" "${output_path}JpegCompressionDistortionFixed_${rgb_name[$rgb]}_${device_name}" $width $height 75 $device $rgb 0 $display
+        ./unit_tests 8 "$caffe2_classification_path" "${output_path}PosterizeFixed_${rgb_name[$rgb]}_${device_name}" $width $height 76 $device $rgb 0 $display
+        ./unit_tests 11 "$mxnet_path" "${output_path}SolarizeFixed_${rgb_name[$rgb]}_${device_name}" $width $height 77 $device $rgb 0 $display
+        ./unit_tests 0 "$image_path" "${output_path}WaterFixed_${rgb_name[$rgb]}_${device_name}" $width $height 78 $device $rgb 0 $display
+
         # to_tensor coverage tests
         for ((memcpy_backend=0;memcpy_backend<=1;memcpy_backend++))
         do

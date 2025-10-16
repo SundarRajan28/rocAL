@@ -31,5 +31,5 @@ class LogNode : public Node {
 
    protected:
     void create_node() override;
-    void update_node() override;
+    void update_node() override {};
 };

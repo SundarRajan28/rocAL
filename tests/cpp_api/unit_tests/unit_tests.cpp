@@ -597,7 +597,7 @@ int test(int test_case, int reader_type, const char *path, const char *outName, 
     // RocalTensor input = rocalResize(handle, decoded_output, resize_w, resize_h, false); // uncomment when processing images of different size
     RocalTensor output;
 
-    if ((test_case == 48 || test_case == 49 || test_case == 50 || test_case == 21 || test_case == 22 || test_case == 24 || test_case == 16 || test_case == 43 || reader_type == 13 || reader_type == 21 || reader_type == 27 || reader_type == 28) && rgb == 0) {
+    if ((test_case == 48 || test_case == 49 || test_case == 50 || test_case == 21 || test_case == 22 || test_case == 24 || test_case == 16 || test_case == 43 || test_case == 64 || reader_type == 13 || reader_type == 21 || reader_type == 27 || reader_type == 28) && rgb == 0) {
         std::cout << "Not a valid option! Exiting!\n";
         rocalRelease(handle);
         return -1;
@@ -883,6 +883,67 @@ int test(int test_case, int reader_type, const char *path, const char *outName, 
             std::vector<float> area_factor = {0.08, 1};
             std::vector<float> aspect_ratio = {3.0f / 4, 4.0f / 3};
             output = rocalRandomResizedCrop(handle, input, resize_w, resize_h, true, area_factor, aspect_ratio);
+        } break;
+        case 64: {
+            std::cout << "Running rocalChannelPermute" << std::endl;
+            std::vector<unsigned> permutation_order = {2, 1, 0};  // RGB to BGR
+            output = rocalChannelPermute(handle, input, permutation_order, true);
+        } break;
+        case 65: {
+            std::cout << "Running rocalGaussianNoise" << std::endl;
+            output = rocalGaussianNoise(handle, input, true);
+        } break;
+        case 66: {
+            std::cout << "Running rocalShotNoise" << std::endl;
+            output = rocalShotNoise(handle, input, true);
+        } break;
+        case 67: {
+            std::cout << "Running rocalJpegCompressionDistortion" << std::endl;
+            output = rocalJpegCompressionDistortion(handle, input, true);
+        } break;
+        case 68: {
+            std::cout << "Running rocalLog" << std::endl;
+            output = rocalLog(handle, input, true);
+        } break;
+        case 69: {
+            std::cout << "Running rocalLUT" << std::endl;
+            output = rocalLUT(handle, input, true);
+        } break;
+        case 70: {
+            std::cout << "Running rocalPosterize" << std::endl;
+            output = rocalPosterize(handle, input, true);
+        } break;
+        case 71: {
+            std::cout << "Running rocalSolarize" << std::endl;
+            output = rocalSolarize(handle, input, true);
+        } break;
+        case 72: {
+            std::cout << "Running rocalWater" << std::endl;
+            output = rocalWater(handle, input, true);
+        } break;
+        case 73: {
+            std::cout << "Running rocalGaussianNoiseFixed" << std::endl;
+            output = rocalGaussianNoiseFixed(handle, input, 0.0f, 0.2f, true, 0);
+        } break;
+        case 74: {
+            std::cout << "Running rocalShotNoiseFixed" << std::endl;
+            output = rocalShotNoiseFixed(handle, input, 80.0f, true, 0);
+        } break;
+        case 75: {
+            std::cout << "Running rocalJpegCompressionDistortionFixed" << std::endl;
+            output = rocalJpegCompressionDistortionFixed(handle, input, 50, true);
+        } break;
+        case 76: {
+            std::cout << "Running rocalPosterizeFixed" << std::endl;
+            output = rocalPosterizeFixed(handle, input, 3, true);
+        } break;
+        case 77: {
+            std::cout << "Running rocalSolarizeFixed" << std::endl;
+            output = rocalSolarizeFixed(handle, input, 0.5f, true);
+        } break;
+        case 78: {
+            std::cout << "Running rocalWaterFixed" << std::endl;
+            output = rocalWaterFixed(handle, input, 2.0f, 5.0f, 5.8f, 1.2f, 10.0f, 15.0f, true);
         } break;
         default:
             std::cout << "Not a valid option! Exiting!\n";
