@@ -750,6 +750,24 @@ extern "C" RocalTensor ROCAL_API_CALL rocalRainFixed(RocalContext context, Rocal
                                                      RocalTensorLayout output_layout = ROCAL_NONE,
                                                      RocalTensorOutputType output_datatype = ROCAL_UINT8);
 
+/*! \brief Applies spatter effect on images.
+ * \ingroup group_rocal_augmentations
+ * \param [in] context Rocal context
+ * \param [in] input Input Rocal tensor
+ * \param [in] is_output is the output tensor part of the graph output
+ * \param [in] red red channel value of the spatter color
+ * \param [in] green green channel value of the spatter color
+ * \param [in] blue blue channel value of the spatter color
+ * \param [in] output_layout the layout of the output tensor
+ * \param [in] output_datatype the data type of the output tensor
+ * \return RocalTensor
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalSpatter(RocalContext context, RocalTensor input,
+                                                   bool is_output,
+                                                   uint8_t red = 65, uint8_t green = 50, uint8_t blue = 23,
+                                                   RocalTensorLayout output_layout = ROCAL_NONE,
+                                                   RocalTensorOutputType output_datatype = ROCAL_UINT8);
+
 /*! \brief Adjusts the color temperature in images.
  * \ingroup group_rocal_augmentations
  * \param [in] context Rocal context
@@ -765,6 +783,47 @@ extern "C" RocalTensor ROCAL_API_CALL rocalColorTemp(RocalContext context, Rocal
                                                      RocalIntParam adjustment = NULL,
                                                      RocalTensorLayout output_layout = ROCAL_NONE,
                                                      RocalTensorOutputType output_datatype = ROCAL_UINT8);
+
+/*! \brief Applies color jitter augmentation on images.
+ * \ingroup group_rocal_augmentations
+ * \param [in] context Rocal context
+ * \param [in] input Input Rocal tensor
+ * \param [in] is_output is the output tensor part of the graph output
+ * \param [in] brightness brightness adjustment factor
+ * \param [in] contrast contrast adjustment factor
+ * \param [in] hue hue adjustment value in degrees
+ * \param [in] saturation saturation adjustment factor
+ * \param [in] output_layout the layout of the output tensor
+ * \param [in] output_datatype the data type of the output tensor
+ * \return RocalTensor
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalColorJitter(RocalContext context, RocalTensor input,
+                                                       bool is_output,
+                                                       RocalFloatParam brightness = NULL,
+                                                       RocalFloatParam contrast = NULL,
+                                                       RocalFloatParam hue = NULL,
+                                                       RocalFloatParam saturation = NULL,
+                                                       RocalTensorLayout output_layout = ROCAL_NONE,
+                                                       RocalTensorOutputType output_datatype = ROCAL_UINT8);
+
+/*! \brief Applies color jitter augmentation on images with fixed parameters.
+ * \ingroup group_rocal_augmentations
+ * \param [in] context Rocal context
+ * \param [in] input Input Rocal tensor
+ * \param [in] brightness brightness adjustment factor
+ * \param [in] contrast contrast adjustment factor
+ * \param [in] hue hue adjustment value in degrees
+ * \param [in] saturation saturation adjustment factor
+ * \param [in] is_output is the output tensor part of the graph output
+ * \param [in] output_layout the layout of the output tensor
+ * \param [in] output_datatype the data type of the output tensor
+ * \return RocalTensor
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalColorJitterFixed(RocalContext context, RocalTensor input,
+                                                             float brightness, float contrast, float hue, float saturation,
+                                                             bool is_output,
+                                                             RocalTensorLayout output_layout = ROCAL_NONE,
+                                                             RocalTensorOutputType output_datatype = ROCAL_UINT8);
 
 /*! \brief Adjusts the color temperature in images with fixed value.
  * \ingroup group_rocal_augmentations
@@ -845,6 +904,21 @@ extern "C" RocalTensor ROCAL_API_CALL rocalPixelate(RocalContext context, RocalT
                                                     bool is_output, float pixelate_percentage = 50.0,
                                                     RocalTensorLayout output_layout = ROCAL_NONE,
                                                     RocalTensorOutputType output_datatype = ROCAL_UINT8);
+
+/*! \brief Converts color images to greyscale.
+ * \ingroup group_rocal_augmentations
+ * \param [in] context Rocal context
+ * \param [in] input Input Rocal tensor
+ * \param [in] is_output is the output tensor part of the graph output
+ * \param [in] subpixel_layout source subpixel layout (0 for RGB, 1 for BGR)
+ * \param [in] output_layout the layout of the output tensor
+ * \param [in] output_datatype the data type of the output tensor
+ * \return RocalTensor
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalColorToGreyscale(RocalContext context, RocalTensor input,
+                                                             bool is_output, int subpixel_layout = 0,
+                                                             RocalTensorLayout output_layout = ROCAL_NONE,
+                                                             RocalTensorOutputType output_datatype = ROCAL_UINT8);
 
 /*! \brief Adjusts the exposure in images.
  * \ingroup group_rocal_augmentations
@@ -1329,10 +1403,51 @@ extern "C" RocalTensor ROCAL_API_CALL rocalTensorMulScalar(RocalContext p_contex
  * \return RocalTensor
  */
 extern "C" RocalTensor ROCAL_API_CALL rocalTensorAddTensor(RocalContext p_context,
-                                                           RocalTensor p_input1,
-                                                           RocalTensor p_input2,
-                                                           bool is_output,
-                                                           RocalTensorOutputType output_datatype = ROCAL_FP32);
+                                                            RocalTensor p_input1,
+                                                            RocalTensor p_input2,
+                                                            bool is_output,
+                                                            RocalTensorOutputType output_datatype = ROCAL_FP32);
+
+/*! \brief Computes tensor sum along channels for each image in the batch.
+ * \ingroup group_rocal_augmentations
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalTensorSum(RocalContext context, RocalTensor input,
+                                                      bool is_output,
+                                                      RocalTensorLayout output_layout = ROCAL_NONE,
+                                                      RocalTensorOutputType output_datatype = ROCAL_FP32);
+
+/*! \brief Computes tensor minimum per image.
+ * \ingroup group_rocal_augmentations
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalTensorMin(RocalContext context, RocalTensor input,
+                                                      bool is_output,
+                                                      RocalTensorLayout output_layout = ROCAL_NONE,
+                                                      RocalTensorOutputType output_datatype = ROCAL_UINT8);
+
+/*! \brief Computes tensor maximum per image.
+ * \ingroup group_rocal_augmentations
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalTensorMax(RocalContext context, RocalTensor input,
+                                                      bool is_output,
+                                                      RocalTensorLayout output_layout = ROCAL_NONE,
+                                                      RocalTensorOutputType output_datatype = ROCAL_UINT8);
+
+/*! \brief Computes tensor mean per image.
+ * \ingroup group_rocal_augmentations
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalTensorMean(RocalContext context, RocalTensor input,
+                                                       bool is_output,
+                                                       RocalTensorLayout output_layout = ROCAL_NONE,
+                                                       RocalTensorOutputType output_datatype = ROCAL_FP32);
+
+/*! \brief Computes tensor standard deviation per image using precomputed means.
+ * \ingroup group_rocal_augmentations
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalTensorStdDev(RocalContext context, RocalTensor input,
+                                                         RocalTensor mean_tensor,
+                                                         bool is_output,
+                                                         RocalTensorLayout output_layout = ROCAL_NONE,
+                                                         RocalTensorOutputType output_datatype = ROCAL_FP32);
 
 /*! \brief Performs silence detection in the input audio tensor
  * \ingroup group_rocal_augmentations

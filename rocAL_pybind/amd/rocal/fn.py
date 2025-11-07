@@ -371,6 +371,24 @@ def pixelate(*inputs, device=None, pixelate_percent=50.0, output_layout=types.NH
     return (pixelate_image)
 
 
+def color_to_greyscale(*inputs, subpixel_layout=0, device=None, output_layout=types.NCHW, output_dtype=types.UINT8):
+    """!Converts color images to greyscale.
+
+        @param inputs (list)                                                          The input image to convert.
+        @param subpixel_layout (int, optional, default = 0)                           Source subpixel layout (0 for RGB, 1 for BGR).
+        @param device (string, optional, default = None)                              Parameter unused for augmentation.
+        @param output_layout (int, optional, default = types.NCHW)                    Tensor layout for the augmentation output.
+        @param output_dtype (int, optional, default = types.UINT8)                    Tensor dtype for the augmentation output.
+
+        @return    Greyscale image.
+    """
+    kwargs_pybind = {"input_image": inputs[0], "is_output": False, "subpixel_layout": subpixel_layout,
+                     "output_layout": output_layout, "output_dtype": output_dtype}
+    greyscale_image = b.colorToGreyscale(
+        Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return (greyscale_image)
+
+
 def rain(*inputs, rain=None, rain_width=0, rain_height=0, rain_transparency=None, rain_slant_angle=0.0,
          device=None, output_layout=types.NHWC, output_dtype=types.UINT8):
     """!Applies Rain effect on images
@@ -1027,6 +1045,33 @@ def color_temp(*inputs, adjustment_value=50, device=None, output_layout=types.NH
     return (color_temp_output)
 
 
+def color_jitter(*inputs, brightness=1.0, contrast=1.0, hue=0.0, saturation=1.0,
+                 device=None, output_layout=types.NHWC, output_dtype=types.UINT8):
+    """!Applies color jitter to the input image.
+
+        @param inputs (list)                                                          The input image to which color jitter is applied.
+        @param brightness (float, optional, default = 1.0)                            Brightness adjustment factor.
+        @param contrast (float, optional, default = 1.0)                              Contrast adjustment factor.
+        @param hue (float, optional, default = 0.0)                                   Hue adjustment value in degrees.
+        @param saturation (float, optional, default = 1.0)                            Saturation adjustment factor.
+        @param device (string, optional, default = None)                              Parameter unused for augmentation.
+        @param output_layout (int, optional, default = types.NHWC)                    Tensor layout for the augmentation output.
+        @param output_dtype (int, optional, default = types.UINT8)                    Tensor dtype for the augmentation output.
+
+        @return    Image with color jitter applied.
+    """
+    brightness = b.createFloatParameter(brightness) if isinstance(brightness, float) else brightness
+    contrast = b.createFloatParameter(contrast) if isinstance(contrast, float) else contrast
+    hue = b.createFloatParameter(hue) if isinstance(hue, float) else hue
+    saturation = b.createFloatParameter(saturation) if isinstance(saturation, float) else saturation
+
+    kwargs_pybind = {"input_image": inputs[0], "is_output": False, "brightness": brightness, "contrast": contrast,
+                     "hue": hue, "saturation": saturation, "output_layout": output_layout, "output_dtype": output_dtype}
+    jittered_image = b.colorJitter(
+        Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return (jittered_image)
+
+
 def nop(*inputs, device=None):
     """!Performs no operation
 
@@ -1134,6 +1179,26 @@ def shot_noise(*inputs, noise_factor=0.1, seed=0, device=None, output_layout=typ
     shot_noise_added_image = b.shotNoise(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (shot_noise_added_image)
+
+
+def spatter(*inputs, red=65, green=50, blue=23, device=None, output_layout=types.NHWC, output_dtype=types.UINT8):
+    """!Applies spatter effect to the input image with a specified color.
+
+        @param inputs (list)                                                          The input image to which the spatter effect is applied.
+        @param red (int, optional, default = 65)                                      Red channel value for the spatter color.
+        @param green (int, optional, default = 50)                                    Green channel value for the spatter color.
+        @param blue (int, optional, default = 23)                                     Blue channel value for the spatter color.
+        @param device (string, optional, default = None)                              Parameter unused for augmentation.
+        @param output_layout (int, optional, default = types.NHWC)                    Tensor layout for the augmentation output.
+        @param output_dtype (int, optional, default = types.UINT8)                    Tensor dtype for the augmentation output.
+
+        @return    Image with spatter effect applied.
+    """
+    kwargs_pybind = {"input_image": inputs[0], "is_output": False, "red": red, "green": green, "blue": blue,
+                     "output_layout": output_layout, "output_dtype": output_dtype}
+    spatter_image = b.spatter(
+        Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return (spatter_image)
 
 
 def box_iou_matcher(*inputs, anchors, high_threshold=0.5,
@@ -1255,6 +1320,46 @@ def tensor_mul_scalar_float(*inputs, scalar=1.0, output_datatype=types.FLOAT):
     kwargs_pybind = {"input_audio": inputs[0], "is_output": False, "scalar": scalar, "output_datatype": output_datatype}
     tensor_mul_scalar_float = b.tensorMulScalar(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
     return tensor_mul_scalar_float
+
+def tensor_sum(*inputs, is_output=False, output_layout=types.NONE, output_dtype=types.FLOAT):
+    """
+    Computes tensor sum per image.
+    """
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": is_output, "output_layout": output_layout, "output_dtype": output_dtype}
+    tensor_sum_output = b.tensorSum(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return tensor_sum_output
+
+def tensor_min(*inputs, is_output=False, output_layout=types.NONE, output_dtype=types.UINT8):
+    """
+    Computes tensor minimum per image.
+    """
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": is_output, "output_layout": output_layout, "output_dtype": output_dtype}
+    tensor_min_output = b.tensorMin(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return tensor_min_output
+
+def tensor_max(*inputs, is_output=False, output_layout=types.NONE, output_dtype=types.UINT8):
+    """
+    Computes tensor maximum per image.
+    """
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": is_output, "output_layout": output_layout, "output_dtype": output_dtype}
+    tensor_max_output = b.tensorMax(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return tensor_max_output
+
+def tensor_mean(*inputs, is_output=False, output_layout=types.NONE, output_dtype=types.FLOAT):
+    """
+    Computes tensor mean per image.
+    """
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": is_output, "output_layout": output_layout, "output_dtype": output_dtype}
+    tensor_mean_output = b.tensorMean(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return tensor_mean_output
+
+def tensor_stddev(input_tensor, mean_tensor, is_output=False, output_layout=types.NONE, output_dtype=types.FLOAT):
+    """
+    Computes tensor standard deviation per image using supplied means.
+    """
+    kwargs_pybind = {"input_tensor": input_tensor, "mean_tensor": mean_tensor, "is_output": is_output, "output_layout": output_layout, "output_dtype": output_dtype}
+    tensor_stddev_output = b.tensorStdDev(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return tensor_stddev_output
 
 def nonsilent_region(*inputs, cutoff_db = -60, reference_power = 0.0, reset_interval = 8192, window_length = 2048):
     """

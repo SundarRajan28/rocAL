@@ -240,6 +240,11 @@ do
         ./unit_tests 8 "$caffe2_classification_path" "${output_path}PosterizeFixed_${rgb_name[$rgb]}_${device_name}" $width $height 76 $device $rgb 0 $display
         ./unit_tests 11 "$mxnet_path" "${output_path}SolarizeFixed_${rgb_name[$rgb]}_${device_name}" $width $height 77 $device $rgb 0 $display
         ./unit_tests 0 "$image_path" "${output_path}WaterFixed_${rgb_name[$rgb]}_${device_name}" $width $height 78 $device $rgb 0 $display
+        ./unit_tests 0 "$image_path" "${output_path}ColorJitterRandom_${rgb_name[$rgb]}_${device_name}" $width $height 79 $device $rgb 0 $display
+        ./unit_tests 0 "$image_path" "${output_path}ColorJitterFixed_${rgb_name[$rgb]}_${device_name}" $width $height 80 $device $rgb 0 $display
+        ./unit_tests 0 "$image_path" "${output_path}Spatter_${rgb_name[$rgb]}_${device_name}" $width $height 81 $device $rgb 0 $display
+        ./unit_tests 0 "$image_path" "${output_path}ColortoGreyscale_${rgb_name[$rgb]}_${device_name}" $width $height 82 $device $rgb 0 $display
+        ./unit_tests 0 "$image_path" "${output_path}TensorReduction_${rgb_name[$rgb]}_${device_name}" $width $height 83 $device $rgb 0 $display
 
         # to_tensor coverage tests
         for ((memcpy_backend=0;memcpy_backend<=1;memcpy_backend++))

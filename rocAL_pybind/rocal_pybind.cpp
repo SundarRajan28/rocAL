@@ -1149,6 +1149,14 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
           py::return_value_policy::reference);
     m.def("colorTemp", &rocalColorTemp,
           py::return_value_policy::reference);
+    m.def("colorJitter", &rocalColorJitter,
+          py::return_value_policy::reference);
+    m.def("colorJitterFixed", &rocalColorJitterFixed,
+          py::return_value_policy::reference);
+    m.def("spatter", &rocalSpatter,
+          py::return_value_policy::reference);
+    m.def("colorToGreyscale", &rocalColorToGreyscale,
+          py::return_value_policy::reference);
     m.def("lensCorrection", &rocalLensCorrection,
           py::return_value_policy::reference);
     m.def("preEmphasisFilter", &rocalPreEmphasisFilter, 
@@ -1166,6 +1174,16 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
     m.def("tensorMulScalar", &rocalTensorMulScalar,
           py::return_value_policy::reference);
     m.def("tensorAddTensor", &rocalTensorAddTensor,
+          py::return_value_policy::reference);
+    m.def("tensorSum", &rocalTensorSum,
+          py::return_value_policy::reference);
+    m.def("tensorMin", &rocalTensorMin,
+          py::return_value_policy::reference);
+    m.def("tensorMax", &rocalTensorMax,
+          py::return_value_policy::reference);
+    m.def("tensorMean", &rocalTensorMean,
+          py::return_value_policy::reference);
+    m.def("tensorStdDev", &rocalTensorStdDev,
           py::return_value_policy::reference);
     m.def("nonSilentRegionDetection", &rocalNonSilentRegionDetection,
           py::return_value_policy::reference);
