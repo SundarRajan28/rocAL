@@ -40,5 +40,5 @@ class SolarizeNode : public Node {
 
    private:
     ParameterVX<float> _threshold;
-    constexpr static float THRESHOLD_RANGE[2] = {0.0f, 255.0f};
+    constexpr static float THRESHOLD_RANGE[2] = {0.0f, 1.0f};
 };
