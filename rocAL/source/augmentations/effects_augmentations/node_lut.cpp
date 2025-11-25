@@ -31,7 +31,7 @@ void LutNode::create_node() {
     if (_node)
         return;
 
-    create_lut_tensor();
+    create_lut_tensor();  // This allocates and initializes the LUT buffer
     int input_layout = static_cast<int>(_inputs[0]->info().layout());
     int output_layout = static_cast<int>(_outputs[0]->info().layout());
     int roi_type = static_cast<int>(_inputs[0]->info().roi_type());
@@ -39,15 +39,11 @@ void LutNode::create_node() {
     vx_scalar output_layout_vx = vxCreateScalar(vxGetContext((vx_reference)_graph->get()), VX_TYPE_INT32, &output_layout);
     vx_scalar roi_type_vx = vxCreateScalar(vxGetContext((vx_reference)_graph->get()), VX_TYPE_INT32, &roi_type);
 
-    _node = vxExtRppLut(_graph->get(), _inputs[0]->handle(), _inputs[0]->get_roi_tensor(), _outputs[0]->handle(), 
+    _node = vxExtRppLut(_graph->get(), _inputs[0]->handle(), _inputs[0]->get_roi_tensor(), _outputs[0]->handle(),
                         _lut_tensor, input_layout_vx, output_layout_vx, roi_type_vx);
     vx_status status;
     if ((status = vxGetStatus((vx_reference)_node)) != VX_SUCCESS)
         THROW("Adding the LUT (vxExtRppLut) node failed: " + TOSTR(status))
-}
-
-void LutNode::init() {
-    init_lut_buffer();
 }
 
 void LutNode::update_node() {
@@ -82,6 +78,9 @@ void LutNode::create_lut_tensor() {
         mem_type = VX_MEMORY_TYPE_HIP;
     
     allocate_host_or_pinned_mem(&_lut_buffer, _lut_size * element_size, _inputs[0]->info().mem_type());
+
+    // Initialize LUT buffer before creating VX tensor
+    init_lut_buffer();
 
     _lut_tensor = vxCreateTensorFromHandle(vxGetContext((vx_reference)_graph->get()), num_of_dims, lut_tensor_dims.data(), data_type, 0,
                                            stride, reinterpret_cast<void *>(_lut_buffer), mem_type);

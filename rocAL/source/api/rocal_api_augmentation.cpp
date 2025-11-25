@@ -3151,8 +3151,7 @@ rocalLUT(
         output_info.set_tensor_layout(op_tensor_layout);
         output_info.set_data_type(op_tensor_datatype);
         output = context->master_graph->create_tensor(output_info, is_output);
-        std::shared_ptr<LutNode> lut_node = context->master_graph->add_node<LutNode>({input}, {output});
-        lut_node->init();
+        context->master_graph->add_node<LutNode>({input}, {output});
     } catch (const std::exception& e) {
         ROCAL_PRINT_EXCEPTION(context, e);
     }

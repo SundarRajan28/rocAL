@@ -28,7 +28,6 @@ class LutNode : public Node {
    public:
     LutNode(const std::vector<Tensor *> &inputs, const std::vector<Tensor *> &outputs);
     LutNode() = delete;
-    void init();
     ~LutNode();
 
    protected:
