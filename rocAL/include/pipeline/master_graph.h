@@ -102,7 +102,7 @@ struct CacheEntry {
 };
 
 class MasterGraph {
-   public:
+public:
     enum class Status { OK = 0,
                         NOT_RUNNING = 1,
                         NO_MORE_DATA = 2,
@@ -136,7 +136,7 @@ class MasterGraph {
     template <typename T, typename M>
     std::shared_ptr<T> meta_add_node(std::shared_ptr<M> node);
     Tensor *create_tensor(const TensorInfo &info, bool is_output);
-    Tensor *create_loader_output_tensor(const TensorInfo &info);
+    Tensor *create_internal_tensor(const TensorInfo &info);  // Creates a regular (non-virtual) tensor and adds it to _internal_tensors vector
     TensorListVector * create_label_reader(const char *source_path, MetaDataReaderType reader_type);
     TensorListVector * create_video_label_reader(const char *source_path, MetaDataReaderType reader_type, unsigned sequence_length, unsigned frame_step, unsigned frame_stride, bool file_list_frame_num = true);
     TensorListVector * create_coco_meta_data_reader(const char *source_path, bool is_output, MetaDataReaderType reader_type, MetaDataType label_type, bool ltrb_bbox = true, bool is_box_encoder = false,
@@ -232,8 +232,6 @@ class MasterGraph {
     std::vector<size_t> _meta_data_buffer_size;
 #if ENABLE_HIP
     DeviceManagerHip _device;                                                     //!< Keeps the device related constructs needed for running on GPU
-#elif ENABLE_OPENCL
-    DeviceManager _device;                                                        //!< Keeps the device related constructs needed for running on GPU
 #endif
     std::shared_ptr<Graph> _graph = nullptr;
     std::vector<std::shared_ptr<Graph>> _graphs;                                  //!< Keeps a list of the Graph instances, a graph is created for each loader
@@ -432,13 +430,15 @@ inline std::shared_ptr<Cifar10LoaderNode> MasterGraph::add_node(const std::vecto
 template<> inline std::shared_ptr<CIFAR10LoaderSingleShardNode> MasterGraph::add_node(const std::vector<Tensor*>& inputs, const std::vector<Tensor*>& outputs) {
     if(_loader_module)
         THROW("A loader already exists, cannot have more than one loader")
-#if ENABLE_HIP || ENABLE_OPENCL
+#if ENABLE_HIP
     auto node = std::make_shared<CIFAR10LoaderSingleShardNode>(outputs[0], (void *)_device.resources());
 #else
     auto node = std::make_shared<CIFAR10LoaderSingleShardNode>(outputs[0], nullptr);
 #endif
-    _loader_module = node->get_loader_module();
-    _loader_module->set_prefetch_queue_depth(_prefetch_queue_depth);
+    auto loader_module = node->get_loader_module();
+    loader_module->set_prefetch_queue_depth(_prefetch_queue_depth);
+    _loader_modules.emplace_back(loader_module);
+    node->set_graph_id(_loaders_count++);
     _root_nodes.push_back(node);
     for(auto& output: outputs)
         _tensor_map.insert(make_pair(output, node));
