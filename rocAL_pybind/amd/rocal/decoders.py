@@ -75,7 +75,7 @@ def image(*inputs, user_feature_key_map=None, path='', file_root='', annotations
         decoded_image = b.cocoImageDecoderShard(
             Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
 
-    elif (reader == 'COCOYoloReader'):
+    elif (reader == 'YoloLabelReader'):
         kwargs_pybind = {
             "source_path": file_root,
             "labels_path": annotations_file,
@@ -89,7 +89,7 @@ def image(*inputs, user_feature_key_map=None, path='', file_root='', annotations
             "max_height": max_decoded_height,
             "dec_type": decoder_type,
             "sharding_info": sharding_info}
-        decoded_image = b.cocoYoloImageDecoder(
+        decoded_image = b.yoloLabelImageDecoder(
             Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
 
     elif (reader == "TFRecordReaderClassification" or reader == "TFRecordReaderDetection"):

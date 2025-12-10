@@ -55,7 +55,7 @@ Reader::Status COCOFileSourceReader::initialize(ReaderConfig desc) {
     _meta_data_reader = desc.meta_data_reader();
 
     bool is_yolo_reader = _meta_data_reader &&
-        (_meta_data_reader->get_reader_type() == MetaDataReaderType::COCO_YOLO_META_DATA_READER);
+        (_meta_data_reader->get_reader_type() == MetaDataReaderType::YOLO_LABEL_META_DATA_READER);
 
     if (_json_path == "" && !is_yolo_reader) {
         std::cout << "\n _json_path has to be set manually";

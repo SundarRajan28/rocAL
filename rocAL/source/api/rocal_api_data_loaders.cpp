@@ -1069,7 +1069,7 @@ rocalJpegCOCOFileSourceSingleShard(
 }
 
 RocalTensor ROCAL_API_CALL
-rocalJpegCOCOYoloFileSource(
+rocalJpegYoloLabelFileSource(
     RocalContext p_context,
     const char* source_path,
     const char* labels_path,
@@ -1101,7 +1101,28 @@ rocalJpegCOCOYoloFileSource(
             LOG("User input size " + TOSTR(max_width) + " x " + TOSTR(max_height))
         }
 
-        auto [width, height] = use_input_dimension ? std::make_tuple(max_width, max_height) : evaluate_image_data_set(decode_size_policy, StorageType::COCO_FILE_SYSTEM, DecoderType::TURBO_JPEG, source_path, "");
+        unsigned width = 0, height = 0;
+        if (use_input_dimension) {
+            width = max_width;
+            height = max_height;
+        } else {
+            // Prefer using metadata (which already probed JPEG headers) when a YOLO label reader is attached.
+            auto meta_reader = context->master_graph->meta_data_reader();
+            if (meta_reader && meta_reader->get_reader_type() == MetaDataReaderType::YOLO_LABEL_META_DATA_READER) {
+                const auto& map = meta_reader->get_map_content();
+                for (const auto& kv : map) {
+                    const auto& img_size = kv.second->get_img_size();
+                    width = std::max(width, static_cast<unsigned>(img_size.w));
+                    height = std::max(height, static_cast<unsigned>(img_size.h));
+                }
+                if (width == 0 || height == 0) {
+                    THROW("Cannot find size of images from YOLO label metadata");
+                }
+            } else {
+                // Fallback: evaluate image sizes directly from the file system using the decoder header path.
+                std::tie(width, height) = evaluate_image_data_set(decode_size_policy, StorageType::FILE_SYSTEM, DecoderType::TURBO_JPEG, source_path, "");
+            }
+        }
 
         auto [color_format, tensor_layout, dims, num_of_planes] = convert_color_format(rocal_color_format, context->user_batch_size(), height, width);
         INFO("Internal buffer size width = " + TOSTR(width) + " height = " + TOSTR(height) + " depth = " + TOSTR(num_of_planes))

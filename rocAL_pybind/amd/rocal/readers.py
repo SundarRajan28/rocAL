@@ -64,22 +64,25 @@ def coco(annotations_file='', ltrb=True, masks=False, ratio=False, avoid_class_r
     return (meta_data, labels, bboxes)
 
 
-def coco_yolo(labels_path='', images_path='', ltrb=True, masks=False, avoid_class_remapping=False,
-              aspect_ratio_grouping=False, stick_to_shard=False, pad_last_batch=False):
-    """!Creates a COCOYoloReader node for reading YOLO format labels.
+def yolo_label(labels_path='', images_path='', ltrb=True, masks=False, avoid_class_remapping=False,
+               aspect_ratio_grouping=False, stick_to_shard=False, pad_last_batch=False):
+    """!Creates a YoloLabelReader node for reading YOLO format labels.
 
         @param labels_path              Path to the directory containing YOLO format .txt label files.
         @param images_path              Path to the directory containing corresponding image files.
         @param ltrb                     Whether bounding box coordinates are provided in (left, top, right, bottom) format.
-        @param masks                    Whether to read polygon masks from segmentation annotation rows.
-        @param avoid_class_remapping    Specifies if class remapping should be avoided.
+        @param masks                    Whether to read polygon masks from segmentation annotation rows. Segmentation rows are expected
+                                        to follow the Ultralytics format "class x1 y1 x2 y2 ... xN yN" with all coordinates normalized to [0,1].
+        @param avoid_class_remapping    Specifies if class remapping should be avoided. If False (default), class ids are remapped to
+                                        contiguous values starting from 1, matching COCO reader semantics. For typical YOLO datasets that
+                                        use 0-based class ids, set this to True to preserve the original ids.
         @param aspect_ratio_grouping    Whether to enable aspect ratio grouping in the pipeline.
         @param stick_to_shard           Determines whether the reader should stick to a data shard instead of going through the entire dataset.
         @param pad_last_batch           If set to True, pads the shard by repeating the last sample.
 
         @return    meta data, labels, and bounding boxes.
     """
-    Pipeline._current_pipeline._reader = "COCOYoloReader"
+    Pipeline._current_pipeline._reader = "YoloLabelReader"
     # Output
     labels = []
     bboxes = []
@@ -91,7 +94,7 @@ def coco_yolo(labels_path='', images_path='', ltrb=True, masks=False, avoid_clas
         "ltrb": ltrb,
         "avoid_class_remapping": avoid_class_remapping,
         "aspect_ratio_grouping": aspect_ratio_grouping}
-    meta_data = b.cocoYoloReader(
+    meta_data = b.yoloLabelReader(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (meta_data, labels, bboxes)
 

@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "meta_data/coco_yolo_meta_data_reader.h"
+#include "meta_data/yolo_label_meta_data_reader.h"
 
 #include <algorithm>
 #include <fstream>
@@ -31,10 +31,10 @@ THE SOFTWARE.
 
 using namespace std;
 
-COCOYoloMetaDataReader::COCOYoloMetaDataReader() : _coco_yolo_metadata_read_time("coco yolo meta read time", DBG_TIMING) {
+YoloLabelMetaDataReader::YoloLabelMetaDataReader() : _yolo_label_metadata_read_time("yolo label meta read time", DBG_TIMING) {
 }
 
-void COCOYoloMetaDataReader::init(const MetaDataConfig &cfg, pMetaDataBatch meta_data_batch) {
+void YoloLabelMetaDataReader::init(const MetaDataConfig &cfg, pMetaDataBatch meta_data_batch) {
     _labels_path = cfg.path();
     _images_path = cfg.images_path();
     _avoid_class_remapping = cfg.class_remapping();
@@ -43,7 +43,7 @@ void COCOYoloMetaDataReader::init(const MetaDataConfig &cfg, pMetaDataBatch meta
     _output->set_metadata_type(cfg.type());
 }
 
-std::string COCOYoloMetaDataReader::normalize_key(const std::string& image_name) {
+std::string YoloLabelMetaDataReader::normalize_key(const std::string& image_name) {
     std::string key = image_name;
     auto last_slash = key.find_last_of("/\\");
     if (last_slash != std::string::npos) {
@@ -56,12 +56,12 @@ std::string COCOYoloMetaDataReader::normalize_key(const std::string& image_name)
     return key;
 }
 
-bool COCOYoloMetaDataReader::exists(const std::string &image_name) {
+bool YoloLabelMetaDataReader::exists(const std::string &image_name) {
     std::string key = normalize_key(image_name);
     return _map_content.find(key) != _map_content.end();
 }
 
-ImgSize COCOYoloMetaDataReader::lookup_image_size(const std::string &image_name) {
+ImgSize YoloLabelMetaDataReader::lookup_image_size(const std::string &image_name) {
     std::string key = normalize_key(image_name);
     auto it = _map_img_sizes.find(key);
     if (it == _map_img_sizes.end())
@@ -69,7 +69,7 @@ ImgSize COCOYoloMetaDataReader::lookup_image_size(const std::string &image_name)
     return it->second;
 }
 
-void COCOYoloMetaDataReader::lookup(const std::vector<std::string> &image_names) {
+void YoloLabelMetaDataReader::lookup(const std::vector<std::string> &image_names) {
     if (image_names.empty()) {
         WRN("No image names passed")
         return;
@@ -94,7 +94,7 @@ void COCOYoloMetaDataReader::lookup(const std::vector<std::string> &image_names)
     }
 }
 
-void COCOYoloMetaDataReader::add(std::string image_name, BoundingBoxCords bb_coords, Labels bb_labels, ImgSize image_size, MaskCords mask_cords, std::vector<int> polygon_count, std::vector<std::vector<int>> vertices_count, int image_id) {
+void YoloLabelMetaDataReader::add(std::string image_name, BoundingBoxCords bb_coords, Labels bb_labels, ImgSize image_size, MaskCords mask_cords, std::vector<int> polygon_count, std::vector<std::vector<int>> vertices_count, int image_id) {
     if (exists(image_name)) {
         std::string key = normalize_key(image_name);
         auto it = _map_content.find(key);
@@ -110,7 +110,7 @@ void COCOYoloMetaDataReader::add(std::string image_name, BoundingBoxCords bb_coo
     _map_content.insert(pair<std::string, std::shared_ptr<PolygonMask>>(key, info));
 }
 
-void COCOYoloMetaDataReader::add(std::string image_name, BoundingBoxCords bb_coords, Labels bb_labels, ImgSize image_size, int image_id) {
+void YoloLabelMetaDataReader::add(std::string image_name, BoundingBoxCords bb_coords, Labels bb_labels, ImgSize image_size, int image_id) {
     if (exists(image_name)) {
         std::string key = normalize_key(image_name);
         auto it = _map_content.find(key);
@@ -123,7 +123,7 @@ void COCOYoloMetaDataReader::add(std::string image_name, BoundingBoxCords bb_coo
     _map_content.insert(pair<std::string, std::shared_ptr<BoundingBox>>(key, info));
 }
 
-BoundingBoxCord COCOYoloMetaDataReader::convert_yolo_to_ltrb(float x_center, float y_center, float width, float height,
+BoundingBoxCord YoloLabelMetaDataReader::convert_yolo_to_ltrb(float x_center, float y_center, float width, float height,
                                                               int img_width, int img_height) {
     float x_center_px = x_center * img_width;
     float y_center_px = y_center * img_height;
@@ -144,7 +144,7 @@ BoundingBoxCord COCOYoloMetaDataReader::convert_yolo_to_ltrb(float x_center, flo
     return box;
 }
 
-BoundingBoxCord COCOYoloMetaDataReader::compute_bbox_from_polygon(const std::vector<float>& polygon_coords,
+BoundingBoxCord YoloLabelMetaDataReader::compute_bbox_from_polygon(const std::vector<float>& polygon_coords,
                                                                    int img_width, int img_height) {
     if (polygon_coords.size() < 4) {
         return BoundingBoxCord{0, 0, 0, 0};
@@ -173,7 +173,7 @@ BoundingBoxCord COCOYoloMetaDataReader::compute_bbox_from_polygon(const std::vec
     return box;
 }
 
-MaskCords COCOYoloMetaDataReader::convert_mask_to_pixel(const MaskCords& norm_coords, int img_width, int img_height) {
+MaskCords YoloLabelMetaDataReader::convert_mask_to_pixel(const MaskCords& norm_coords, int img_width, int img_height) {
     MaskCords pixel_coords;
     pixel_coords.reserve(norm_coords.size());
     for (size_t i = 0; i < norm_coords.size(); i += 2) {
@@ -185,8 +185,9 @@ MaskCords COCOYoloMetaDataReader::convert_mask_to_pixel(const MaskCords& norm_co
     return pixel_coords;
 }
 
-filesys::path COCOYoloMetaDataReader::find_image_path(const std::string& basename) {
-    static const std::vector<std::string> extensions = {".jpg", ".jpeg", ".png", ".bmp", ".JPG", ".JPEG", ".PNG", ".BMP"};
+filesys::path YoloLabelMetaDataReader::find_image_path(const std::string& basename) {
+    // YOLO label reader supports only JPEG images.
+    static const std::vector<std::string> extensions = {".jpg", ".jpeg", ".JPG", ".JPEG"};
     for (const auto& ext : extensions) {
         filesys::path candidate = filesys::path(_images_path) / (basename + ext);
         if (filesys::exists(candidate)) {
@@ -196,130 +197,54 @@ filesys::path COCOYoloMetaDataReader::find_image_path(const std::string& basenam
     return filesys::path();
 }
 
-ImgSize COCOYoloMetaDataReader::probe_image_size(const filesys::path& image_path) {
+ImgSize YoloLabelMetaDataReader::probe_image_size(const filesys::path& image_path) {
     std::ifstream file(image_path, std::ios::binary);
     if (!file.is_open()) {
         THROW("Cannot open image file: " + image_path.string())
     }
 
-    unsigned char header[32];
-    file.read(reinterpret_cast<char*>(header), 32);
+    unsigned char header[4];
+    file.read(reinterpret_cast<char*>(header), 4);
     size_t bytes_read = file.gcount();
 
-    if (bytes_read < 8) {
+    if (bytes_read < 2) {
         THROW("Image file too small: " + image_path.string())
     }
 
+    // Metadata pipeline currently supports only JPEG images for YOLO label reader.
+    // Verify JPEG SOI marker (0xFF, 0xD8) before parsing the header.
+    if (!(header[0] == 0xFF && header[1] == 0xD8)) {
+        THROW("Unsupported image format for YOLO label reader (only JPEG is supported): " + image_path.string())
+    }
+
     ImgSize size{0, 0};
-    bool need_exif_check = false;
 
-    if (header[0] == 0x89 && header[1] == 'P' && header[2] == 'N' && header[3] == 'G') {
-        if (bytes_read >= 24) {
-            size.w = (header[16] << 24) | (header[17] << 16) | (header[18] << 8) | header[19];
-            size.h = (header[20] << 24) | (header[21] << 16) | (header[22] << 8) | header[23];
+    // Parse SOF marker to extract width/height, without applying EXIF orientation.
+    // This keeps dimensions consistent with turbojpeg's tjDecompressHeader2 / decode_info.
+    file.seekg(2, std::ios::beg);
+    unsigned char buf[12];
+    while (file.read(reinterpret_cast<char*>(buf), 4)) {
+        if (buf[0] != 0xFF) break;
+        unsigned char marker = buf[1];
+        int length = (buf[2] << 8) | buf[3];
+
+        if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2 || marker == 0xC3) {
+            file.read(reinterpret_cast<char*>(buf), 5);
+            size.h = (buf[1] << 8) | buf[2];
+            size.w = (buf[3] << 8) | buf[4];
+            break;
         }
-    } else if (header[0] == 0xFF && header[1] == 0xD8) {
-        need_exif_check = true;
-        file.seekg(2, std::ios::beg);
-        unsigned char buf[12];
-        while (file.read(reinterpret_cast<char*>(buf), 4)) {
-            if (buf[0] != 0xFF) break;
-            unsigned char marker = buf[1];
-            int length = (buf[2] << 8) | buf[3];
-
-            if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2 || marker == 0xC3) {
-                file.read(reinterpret_cast<char*>(buf), 5);
-                size.h = (buf[1] << 8) | buf[2];
-                size.w = (buf[3] << 8) | buf[4];
-                break;
-            }
-            file.seekg(length - 2, std::ios::cur);
-        }
-
-        if (need_exif_check && (size.w > 0 || size.h > 0)) {
-            file.seekg(2, std::ios::beg);
-            unsigned char exif_buf[12];
-            while (file.read(reinterpret_cast<char*>(exif_buf), 4)) {
-                if (exif_buf[0] != 0xFF) break;
-                unsigned char marker = exif_buf[1];
-                int length = (exif_buf[2] << 8) | exif_buf[3];
-
-                if (marker == 0xE1) {
-                    std::vector<unsigned char> app1_data(length - 2);
-                    file.read(reinterpret_cast<char*>(app1_data.data()), length - 2);
-
-                    if (app1_data.size() >= 6 &&
-                        app1_data[0] == 'E' && app1_data[1] == 'x' && app1_data[2] == 'i' &&
-                        app1_data[3] == 'f' && app1_data[4] == 0 && app1_data[5] == 0) {
-
-                        size_t tiff_offset = 6;
-                        if (app1_data.size() < tiff_offset + 8) break;
-
-                        bool big_endian = (app1_data[tiff_offset] == 'M' && app1_data[tiff_offset + 1] == 'M');
-
-                        auto read_uint16 = [&](size_t offset) -> uint16_t {
-                            if (offset + 2 > app1_data.size()) return 0;
-                            if (big_endian)
-                                return (app1_data[offset] << 8) | app1_data[offset + 1];
-                            else
-                                return app1_data[offset] | (app1_data[offset + 1] << 8);
-                        };
-
-                        auto read_uint32 = [&](size_t offset) -> uint32_t {
-                            if (offset + 4 > app1_data.size()) return 0;
-                            if (big_endian)
-                                return (app1_data[offset] << 24) | (app1_data[offset + 1] << 16) |
-                                       (app1_data[offset + 2] << 8) | app1_data[offset + 3];
-                            else
-                                return app1_data[offset] | (app1_data[offset + 1] << 8) |
-                                       (app1_data[offset + 2] << 16) | (app1_data[offset + 3] << 24);
-                        };
-
-                        uint32_t ifd_offset = read_uint32(tiff_offset + 4);
-                        size_t ifd_start = tiff_offset + ifd_offset;
-
-                        if (ifd_start + 2 > app1_data.size()) break;
-                        uint16_t num_entries = read_uint16(ifd_start);
-
-                        for (uint16_t i = 0; i < num_entries; i++) {
-                            size_t entry_offset = ifd_start + 2 + i * 12;
-                            if (entry_offset + 12 > app1_data.size()) break;
-
-                            uint16_t tag = read_uint16(entry_offset);
-                            if (tag == 0x0112) {
-                                uint16_t orientation = read_uint16(entry_offset + 8);
-                                if (orientation >= 5 && orientation <= 8) {
-                                    std::swap(size.w, size.h);
-                                }
-                                break;
-                            }
-                        }
-                    }
-                    break;
-                } else if (marker == 0xC0 || marker == 0xC2) {
-                    break;
-                }
-                file.seekg(length - 2, std::ios::cur);
-            }
-        }
-    } else if (header[0] == 'B' && header[1] == 'M') {
-        if (bytes_read >= 26) {
-            size.w = header[18] | (header[19] << 8) | (header[20] << 16) | (header[21] << 24);
-            int32_t h_signed = header[22] | (header[23] << 8) | (header[24] << 16) | (header[25] << 24);
-            size.h = std::abs(h_signed);
-        }
-    } else {
-        THROW("Unsupported image format: " + image_path.string())
+        file.seekg(length - 2, std::ios::cur);
     }
 
     if (size.w <= 0 || size.h <= 0) {
-        THROW("Could not determine image dimensions: " + image_path.string())
+        THROW("Could not determine JPEG image dimensions: " + image_path.string())
     }
 
     return size;
 }
 
-void COCOYoloMetaDataReader::parse_label_file(const filesys::path& label_path, const std::string& image_key, ImgSize image_size) {
+void YoloLabelMetaDataReader::parse_label_file(const filesys::path& label_path, const std::string& image_key, ImgSize image_size) {
     std::ifstream file(label_path);
     if (!file.is_open()) {
         WRN("Cannot open label file: " + label_path.string())
@@ -419,8 +344,8 @@ void COCOYoloMetaDataReader::parse_label_file(const filesys::path& label_path, c
     }
 }
 
-void COCOYoloMetaDataReader::read_all(const std::string &path) {
-    _coco_yolo_metadata_read_time.start();
+void YoloLabelMetaDataReader::read_all(const std::string &path) {
+    _yolo_label_metadata_read_time.start();
 
     if (!filesys::exists(path) || !filesys::is_directory(path)) {
         THROW("Labels directory does not exist: " + path)
@@ -482,11 +407,11 @@ void COCOYoloMetaDataReader::read_all(const std::string &path) {
         }
     }
 
-    _coco_yolo_metadata_read_time.end();
-    LOG("COCO YOLO metadata reader: processed " + std::to_string(files_processed) + " files, skipped " + std::to_string(files_skipped))
+    _yolo_label_metadata_read_time.end();
+    LOG("YOLO label metadata reader: processed " + std::to_string(files_processed) + " files, skipped " + std::to_string(files_skipped))
 }
 
-void COCOYoloMetaDataReader::print_map_contents() {
+void YoloLabelMetaDataReader::print_map_contents() {
     BoundingBoxCords bb_coords;
     Labels bb_labels;
     ImgSize img_size;
@@ -511,7 +436,7 @@ void COCOYoloMetaDataReader::print_map_contents() {
             vertices_count = elem.second->get_vertices_count();
             std::cout << "\nNumber of objects : " << bb_coords.size() << std::endl;
             for (unsigned int i = 0; i < bb_coords.size(); i++) {
-                std::cout << "\nNumber of polygons for object[ << " << i << "]:" << polygon_size[i];
+                std::cout << "\nNumber of polygons for object[" << i << "]:" << polygon_size[i];
                 for (int j = 0; j < polygon_size[i]; j++) {
                     std::cout << "\nPolygon size :" << vertices_count[i][j] << " Elements::";
                     for (int k = 0; k < vertices_count[i][j]; k++, count++)
@@ -522,7 +447,7 @@ void COCOYoloMetaDataReader::print_map_contents() {
     }
 }
 
-void COCOYoloMetaDataReader::release(std::string image_name) {
+void YoloLabelMetaDataReader::release(std::string image_name) {
     std::string key = normalize_key(image_name);
     auto it = _map_content.find(key);
     if (it == _map_content.end()) {
@@ -532,8 +457,9 @@ void COCOYoloMetaDataReader::release(std::string image_name) {
     _map_content.erase(it);
 }
 
-void COCOYoloMetaDataReader::release() {
+void YoloLabelMetaDataReader::release() {
     _map_content.clear();
     _map_img_sizes.clear();
     _relative_file_paths.clear();
 }
+

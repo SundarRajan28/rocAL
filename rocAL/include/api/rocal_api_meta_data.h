@@ -88,7 +88,7 @@ extern "C" RocalMetaData ROCAL_API_CALL rocalCreateTFReaderDetection(RocalContex
  */
 extern "C" RocalMetaData ROCAL_API_CALL rocalCreateCOCOReader(RocalContext rocal_context, const char* source_path, bool is_output, bool mask = false, bool ltrb = true, bool is_box_encoder = false, bool avoid_class_remapping = false, bool aspect_ratio_grouping = false, bool is_box_iou_matcher = false);
 
-/*! \brief create coco reader for YOLO format labels
+/*! \brief create YOLO label reader for Ultralytics-style datasets
  * \ingroup group_rocal_meta_data
  * \param [in] rocal_context rocal context
  * \param [in] labels_path path to the directory containing YOLO format .txt label files
@@ -96,11 +96,16 @@ extern "C" RocalMetaData ROCAL_API_CALL rocalCreateCOCOReader(RocalContext rocal
  * \param [in] is_output Determines if the user wants the loaded tensors to be part of the output or not
  * \param [in] mask if set to true, mask coordinates are loaded from segmentation annotation rows
  * \param [in] ltrb if set to True, bboxes are returned as [left, top, right, bottom]. If set to False, bboxes are returned as [x, y, width, height]
- * \param [in] avoid_class_remapping If set to True, class labels are returned unchanged. If set to False, labels are remapped to contiguous values starting from 1
+ * \param [in] avoid_class_remapping If set to True, class labels are returned unchanged. If set to False (default), labels are remapped to contiguous values starting from 1, matching COCO reader semantics. For typical YOLO datasets that use 0-based class ids, set this to True to preserve the original ids.
  * \param [in] aspect_ratio_grouping If set to True, images are sorted by their aspect ratio and returned
+ *
+ * The labels are expected to follow Ultralytics-style YOLO formatting:
+ *   - Detection rows:  "class x_center y_center width height" (5 numeric values after class, all normalized to [0,1])
+ *   - Segmentation rows: "class x1 y1 x2 y2 ... xN yN" (an even number of normalized vertex coordinates after class)
+ * Mixed or extended formats (for example rows that contain both a bbox and a polygon in the same line) are not supported.
  * \return RocalMetaData object, can be used to inquire about the rocal's output (processed) tensors
  */
-extern "C" RocalMetaData ROCAL_API_CALL rocalCreateCOCOYoloReader(RocalContext rocal_context, const char* labels_path, const char* images_path, bool is_output, bool mask = false, bool ltrb = true, bool avoid_class_remapping = false, bool aspect_ratio_grouping = false);
+extern "C" RocalMetaData ROCAL_API_CALL rocalCreateYoloLabelReader(RocalContext rocal_context, const char* labels_path, const char* images_path, bool is_output, bool mask = false, bool ltrb = true, bool avoid_class_remapping = false, bool aspect_ratio_grouping = false);
 
 /*! \brief create coco reader key points
  * \ingroup group_rocal_meta_data

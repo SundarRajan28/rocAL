@@ -813,7 +813,7 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
     m.def("getTimingInfo", &rocalGetTimingInfo);
     m.def("labelReader", &rocalCreateLabelReader, py::return_value_policy::reference);
     m.def("cocoReader", &rocalCreateCOCOReader, py::return_value_policy::reference);
-    m.def("cocoYoloReader", &rocalCreateCOCOYoloReader, py::return_value_policy::reference);
+    m.def("yoloLabelReader", &rocalCreateYoloLabelReader, py::return_value_policy::reference);
     m.def("getLastBatchPaddedSize", &rocalGetLastBatchPaddedSize, py::return_value_policy::reference);
     // rocal_api_meta_data.h
     m.def("randomBBoxCrop", &rocalRandomBBoxCrop);
@@ -1015,7 +1015,7 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
           py::return_value_policy::reference);
     m.def("cocoImageDecoderShard", &rocalJpegCOCOFileSourceSingleShard, "Reads file from the source given and decodes it according to the shard id and number of shards",
           py::return_value_policy::reference);
-    m.def("cocoYoloImageDecoder", &rocalJpegCOCOYoloFileSource, "Reads file from the source given and decodes it according to the policy using YOLO format labels",
+    m.def("yoloLabelImageDecoder", &rocalJpegYoloLabelFileSource, "Reads file from the source given and decodes it according to the policy using YOLO format labels",
           py::return_value_policy::reference);
     m.def("tfImageDecoder", &rocalJpegTFRecordSource, "Reads file from the source given and decodes it according to the policy only for TFRecords",
           py::return_value_policy::reference);
