@@ -88,6 +88,20 @@ extern "C" RocalMetaData ROCAL_API_CALL rocalCreateTFReaderDetection(RocalContex
  */
 extern "C" RocalMetaData ROCAL_API_CALL rocalCreateCOCOReader(RocalContext rocal_context, const char* source_path, bool is_output, bool mask = false, bool ltrb = true, bool is_box_encoder = false, bool avoid_class_remapping = false, bool aspect_ratio_grouping = false, bool is_box_iou_matcher = false);
 
+/*! \brief create coco reader for YOLO format labels
+ * \ingroup group_rocal_meta_data
+ * \param [in] rocal_context rocal context
+ * \param [in] labels_path path to the directory containing YOLO format .txt label files
+ * \param [in] images_path path to the directory containing corresponding image files
+ * \param [in] is_output Determines if the user wants the loaded tensors to be part of the output or not
+ * \param [in] mask if set to true, mask coordinates are loaded from segmentation annotation rows
+ * \param [in] ltrb if set to True, bboxes are returned as [left, top, right, bottom]. If set to False, bboxes are returned as [x, y, width, height]
+ * \param [in] avoid_class_remapping If set to True, class labels are returned unchanged. If set to False, labels are remapped to contiguous values starting from 1
+ * \param [in] aspect_ratio_grouping If set to True, images are sorted by their aspect ratio and returned
+ * \return RocalMetaData object, can be used to inquire about the rocal's output (processed) tensors
+ */
+extern "C" RocalMetaData ROCAL_API_CALL rocalCreateCOCOYoloReader(RocalContext rocal_context, const char* labels_path, const char* images_path, bool is_output, bool mask = false, bool ltrb = true, bool avoid_class_remapping = false, bool aspect_ratio_grouping = false);
+
 /*! \brief create coco reader key points
  * \ingroup group_rocal_meta_data
  * \param [in] rocal_context rocal context

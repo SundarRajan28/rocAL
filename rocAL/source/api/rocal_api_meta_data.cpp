@@ -82,6 +82,17 @@ RocalMetaData
 
 RocalMetaData
     ROCAL_API_CALL
+    rocalCreateCOCOYoloReader(RocalContext p_context, const char* labels_path, const char* images_path, bool is_output, bool mask, bool ltrb, bool avoid_class_remapping, bool aspect_ratio_grouping) {
+    ROCAL_INVALID_CONTEXT_EXCEPTION(p_context);
+    auto context = static_cast<Context*>(p_context);
+    if (mask) {
+        return context->master_graph->create_coco_yolo_meta_data_reader(labels_path, images_path, is_output, MetaDataReaderType::COCO_YOLO_META_DATA_READER, MetaDataType::PolygonMask, ltrb, avoid_class_remapping, aspect_ratio_grouping);
+    }
+    return context->master_graph->create_coco_yolo_meta_data_reader(labels_path, images_path, is_output, MetaDataReaderType::COCO_YOLO_META_DATA_READER, MetaDataType::BoundingBox, ltrb, avoid_class_remapping, aspect_ratio_grouping);
+}
+
+RocalMetaData
+    ROCAL_API_CALL
     rocalCreateCOCOReaderKeyPoints(RocalContext p_context, const char* source_path, bool is_output, float sigma, unsigned pose_output_width, unsigned pose_output_height) {
     ROCAL_INVALID_CONTEXT_EXCEPTION(p_context);
     auto context = static_cast<Context*>(p_context);

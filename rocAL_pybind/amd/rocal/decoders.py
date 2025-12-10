@@ -75,6 +75,23 @@ def image(*inputs, user_feature_key_map=None, path='', file_root='', annotations
         decoded_image = b.cocoImageDecoderShard(
             Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
 
+    elif (reader == 'COCOYoloReader'):
+        kwargs_pybind = {
+            "source_path": file_root,
+            "labels_path": annotations_file,
+            "color_format": output_type,
+            "num_shards": num_shards,
+            'is_output': False,
+            "shuffle": random_shuffle,
+            "loop": False,
+            "decode_size_policy": decode_size_policy,
+            "max_width": max_decoded_width,
+            "max_height": max_decoded_height,
+            "dec_type": decoder_type,
+            "sharding_info": sharding_info}
+        decoded_image = b.cocoYoloImageDecoder(
+            Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+
     elif (reader == "TFRecordReaderClassification" or reader == "TFRecordReaderDetection"):
         kwargs_pybind = {
             "source_path": path,
@@ -495,4 +512,3 @@ def audio(*inputs, file_root='', file_list_path='', bytes_per_sample_hint=[0], s
     Pipeline._current_pipeline._last_batch_policy = last_batch_policy
     decoded_audio = b.audioDecoderSingleShard(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return decoded_audio
-
