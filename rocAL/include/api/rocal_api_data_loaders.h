@@ -306,6 +306,38 @@ extern "C" RocalTensor ROCAL_API_CALL rocalJpegYoloLabelFileSource(RocalContext 
                                                                    RocalDecoderType rocal_decoder_type = RocalDecoderType::ROCAL_DECODER_TJPEG,
                                                                    RocalShardingInfo rocal_sharding_info = RocalShardingInfo());
 
+/*! \brief JPEG image reader and decoder for YOLO format datasets (single external shard variant). It allocates the resources and objects required to read and decode Jpeg images stored on the file systems. If images are not Jpeg compressed they will be ignored. This function is used when metadata is provided in YOLO .txt format (such as Ultralytics YOLO labels) instead of COCO JSON.
+ * \ingroup group_rocal_data_loaders
+ * \param [in] context Rocal context
+ * \param [in] source_path A NULL terminated char string pointing to the location of images on the disk
+ * \param [in] labels_path A NULL terminated char string pointing to the location of YOLO format .txt label files on the disk
+ * \param [in] rocal_color_format The color format the images will be decoded to.
+ * \param [in] shard_id Shard id for this loader
+ * \param [in] shard_count Total shard count
+ * \param [in] is_output Determines if the user wants the loaded images to be part of the output or not.
+ * \param [in] shuffle Determines if the user wants to shuffle the dataset or not.
+ * \param [in] loop Determines if the user wants to indefinitely loops through images or not.
+ * \param [in] decode_size_policy
+ * \param [in] max_width The maximum width of the decoded images, larger or smaller will be resized to closest
+ * \param [in] max_height The maximum height of the decoded images, larger or smaller will be resized to closest
+ * \param [in] rocal_decoder_type Determines the decoder_type, TurboJPEG, OpenCV or rocJPEG
+ * \param [in] rocal_sharding_info The members of RocalShardingInfo determines how the data is distributed among the shards and how the last batch is processed by the pipeline.
+ * \return Reference to the output tensor
+ */
+extern "C" RocalTensor ROCAL_API_CALL rocalJpegYoloLabelFileSourceSingleShard(RocalContext context,
+                                                                              const char* source_path,
+                                                                              const char* labels_path,
+                                                                              RocalImageColor rocal_color_format,
+                                                                              unsigned shard_id,
+                                                                              unsigned shard_count,
+                                                                              bool is_output,
+                                                                              bool shuffle = false,
+                                                                              bool loop = false,
+                                                                              RocalImageSizeEvaluationPolicy decode_size_policy = ROCAL_USE_MOST_FREQUENT_SIZE,
+                                                                              unsigned max_width = 0, unsigned max_height = 0,
+                                                                              RocalDecoderType rocal_decoder_type = RocalDecoderType::ROCAL_DECODER_TJPEG,
+                                                                              RocalShardingInfo rocal_sharding_info = RocalShardingInfo());
+
 /*! \brief Creates JPEG image reader and decoder for Caffe LMDB records. It allocates the resources and objects required to read and decode Jpeg images stored in Caffe LMDB Records. It has internal sharding capability to load/decode in parallel is user wants. If images are not Jpeg compressed they will be ignored.
  * \ingroup group_rocal_data_loaders
  * \param [in] context Rocal context

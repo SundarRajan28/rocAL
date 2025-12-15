@@ -1017,6 +1017,8 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
           py::return_value_policy::reference);
     m.def("yoloLabelImageDecoder", &rocalJpegYoloLabelFileSource, "Reads file from the source given and decodes it according to the policy using YOLO format labels",
           py::return_value_policy::reference);
+    m.def("yoloLabelImageDecoderShard", &rocalJpegYoloLabelFileSourceSingleShard, "Reads file from the source given and decodes it according to the shard id and number of shards using YOLO format labels",
+          py::return_value_policy::reference);
     m.def("tfImageDecoder", &rocalJpegTFRecordSource, "Reads file from the source given and decodes it according to the policy only for TFRecords",
           py::return_value_policy::reference);
     m.def("caffeImageDecoder", &rocalJpegCaffeLMDBRecordSource, "Reads file from the source given and decodes it according to the policy",

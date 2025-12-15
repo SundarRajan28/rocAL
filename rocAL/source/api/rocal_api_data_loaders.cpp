@@ -1069,6 +1069,119 @@ rocalJpegCOCOFileSourceSingleShard(
 }
 
 RocalTensor ROCAL_API_CALL
+rocalJpegYoloLabelFileSourceSingleShard(
+    RocalContext p_context,
+    const char* source_path,
+    const char* labels_path,
+    RocalImageColor rocal_color_format,
+    unsigned shard_id,
+    unsigned shard_count,
+    bool is_output,
+    bool shuffle,
+    bool loop,
+    RocalImageSizeEvaluationPolicy decode_size_policy,
+    unsigned max_width,
+    unsigned max_height,
+    RocalDecoderType dec_type,
+    RocalShardingInfo rocal_sharding_info) {
+    Tensor* output = nullptr;
+    auto context = static_cast<Context*>(p_context);
+    try {
+        bool use_input_dimension = (decode_size_policy == ROCAL_USE_USER_GIVEN_SIZE) || (decode_size_policy == ROCAL_USE_USER_GIVEN_SIZE_RESTRICTED);
+        bool decoder_keep_original = (decode_size_policy == ROCAL_USE_USER_GIVEN_SIZE_RESTRICTED) || (decode_size_policy == ROCAL_USE_MAX_SIZE_RESTRICTED);
+        DecoderType decType = DecoderType::TURBO_JPEG;  // default
+        if (dec_type == ROCAL_DECODER_OPENCV) decType = DecoderType::OPENCV;
+        if (dec_type == ROCAL_DECODER_ROCJPEG) decType = DecoderType::ROCJPEG;
+
+        if (shard_count < 1)
+            THROW("Shard count should be bigger than 0")
+
+        if (shard_id >= shard_count)
+            THROW("Shard id should be smaller than shard count")
+
+        if (use_input_dimension && (max_width == 0 || max_height == 0)) {
+            THROW("Invalid input max width and height");
+        } else {
+            LOG("User input size " + TOSTR(max_width) + " x " + TOSTR(max_height))
+        }
+
+        unsigned width = 0, height = 0;
+        if (use_input_dimension) {
+            width = max_width;
+            height = max_height;
+        } else {
+            // Prefer using metadata (which already probed JPEG headers) when a YOLO label reader is attached.
+            auto meta_reader = context->master_graph->meta_data_reader();
+            if (meta_reader && meta_reader->get_reader_type() == MetaDataReaderType::YOLO_LABEL_META_DATA_READER) {
+                const auto& map = meta_reader->get_map_content();
+                if (map.empty()) {
+                    THROW("Cannot find size of images from YOLO label metadata (metadata map is empty)");
+                }
+
+                unsigned max_width_found = 0;
+                unsigned max_height_found = 0;
+                std::map<std::pair<int, int>, size_t> size_histogram;
+
+                for (const auto& kv : map) {
+                    const auto& img_size = kv.second->get_img_size();
+                    max_width_found = std::max(max_width_found, static_cast<unsigned>(img_size.w));
+                    max_height_found = std::max(max_height_found, static_cast<unsigned>(img_size.h));
+                    size_histogram[std::make_pair(img_size.w, img_size.h)]++;
+                }
+
+                if (decode_size_policy == ROCAL_USE_MOST_FREQUENT_SIZE) {
+                    size_t best_count = 0;
+                    std::pair<int, int> best_size = {0, 0};
+                    for (const auto& entry : size_histogram) {
+                        if (entry.second > best_count) {
+                            best_count = entry.second;
+                            best_size = entry.first;
+                        }
+                    }
+                    width = static_cast<unsigned>(best_size.first);
+                    height = static_cast<unsigned>(best_size.second);
+                } else {
+                    // MAX_SIZE and restricted variants collapse to maximum dimensions.
+                    width = max_width_found;
+                    height = max_height_found;
+                }
+
+                if (width == 0 || height == 0) {
+                    THROW("Cannot find size of images from YOLO label metadata");
+                }
+            } else {
+                // Fallback: evaluate image sizes directly from the file system using the decoder header path.
+                std::tie(width, height) = evaluate_image_data_set(decode_size_policy, StorageType::FILE_SYSTEM, DecoderType::TURBO_JPEG, source_path, "");
+            }
+        }
+
+        auto [color_format, tensor_layout, dims, num_of_planes] = convert_color_format(rocal_color_format, context->user_batch_size(), height, width);
+        INFO("Internal buffer size width = " + TOSTR(width) + " height = " + TOSTR(height) + " depth = " + TOSTR(num_of_planes))
+        ShardingInfo sharding_info(convert_last_batch_policy(rocal_sharding_info.last_batch_policy), rocal_sharding_info.pad_last_batch_repeated, rocal_sharding_info.stick_to_shard, rocal_sharding_info.shard_size);
+
+        auto info = TensorInfo(std::move(dims),
+                               context->master_graph->mem_type(),
+                               RocalTensorDataType::UINT8,
+                               tensor_layout,
+                               color_format);
+        output = context->master_graph->create_internal_tensor(info);
+        auto cpu_num_threads = context->master_graph->calculate_cpu_num_threads(shard_count);
+
+        context->master_graph->add_node<ImageLoaderSingleShardNode>({}, {output})->init(shard_id, shard_count, cpu_num_threads, source_path, "", StorageType::COCO_FILE_SYSTEM, decType, shuffle, loop, context->user_batch_size(), context->master_graph->mem_type(), context->master_graph->meta_data_reader(), decoder_keep_original, sharding_info);
+        context->master_graph->set_loop(loop);
+
+        if (is_output) {
+            auto actual_output = context->master_graph->create_tensor(info, is_output);
+            context->master_graph->add_node<CopyNode>({output}, {actual_output});
+        }
+
+    } catch (const std::exception& e) {
+        ROCAL_PRINT_EXCEPTION(context, e);
+    }
+    return output;
+}
+
+RocalTensor ROCAL_API_CALL
 rocalJpegYoloLabelFileSource(
     RocalContext p_context,
     const char* source_path,
@@ -1110,13 +1223,40 @@ rocalJpegYoloLabelFileSource(
             auto meta_reader = context->master_graph->meta_data_reader();
             if (meta_reader && meta_reader->get_reader_type() == MetaDataReaderType::YOLO_LABEL_META_DATA_READER) {
                 const auto& map = meta_reader->get_map_content();
+                if (map.empty()) {
+                    THROW("Cannot find size of images from YOLOLabel metadata reader (map is empty)");
+                }
+
+                unsigned max_width_found = 0;
+                unsigned max_height_found = 0;
+                std::map<std::pair<int, int>, size_t> size_histogram;
+
                 for (const auto& kv : map) {
                     const auto& img_size = kv.second->get_img_size();
-                    width = std::max(width, static_cast<unsigned>(img_size.w));
-                    height = std::max(height, static_cast<unsigned>(img_size.h));
+                    max_width_found = std::max(max_width_found, static_cast<unsigned>(img_size.w));
+                    max_height_found = std::max(max_height_found, static_cast<unsigned>(img_size.h));
+                    size_histogram[std::make_pair(img_size.w, img_size.h)]++;
                 }
+
+                if (decode_size_policy == ROCAL_USE_MOST_FREQUENT_SIZE) {
+                    size_t best_count = 0;
+                    std::pair<int, int> best_size = {0, 0};
+                    for (const auto& entry : size_histogram) {
+                        if (entry.second > best_count) {
+                            best_count = entry.second;
+                            best_size = entry.first;
+                        }
+                    }
+                    width = static_cast<unsigned>(best_size.first);
+                    height = static_cast<unsigned>(best_size.second);
+                } else {
+                    // MAX_SIZE and restricted variants use maximum dimensions.
+                    width = max_width_found;
+                    height = max_height_found;
+                }
+
                 if (width == 0 || height == 0) {
-                    THROW("Cannot find size of images from YOLO label metadata");
+                    THROW("Cannot find size of images from YOLOLabel metadata reader");
                 }
             } else {
                 // Fallback: evaluate image sizes directly from the file system using the decoder header path.

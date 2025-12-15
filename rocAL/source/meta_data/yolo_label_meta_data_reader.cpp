@@ -224,12 +224,20 @@ ImgSize YoloLabelMetaDataReader::probe_image_size(const filesys::path& image_pat
     file.seekg(2, std::ios::beg);
     unsigned char buf[12];
     while (file.read(reinterpret_cast<char*>(buf), 4)) {
-        if (buf[0] != 0xFF) break;
+        if (buf[0] != 0xFF)
+            break;
         unsigned char marker = buf[1];
         int length = (buf[2] << 8) | buf[3];
+        if (length < 2) {
+            THROW("Invalid JPEG segment length in: " + image_path.string())
+        }
 
-        if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2 || marker == 0xC3) {
-            file.read(reinterpret_cast<char*>(buf), 5);
+        // Accept all Start Of Frame markers that carry size info (C0-CF) except non-SOF markers like DHT/DAC.
+        bool is_sof = (marker >= 0xC0 && marker <= 0xCF) && (marker != 0xC4) && (marker != 0xC8) && (marker != 0xCC);
+        if (is_sof) {
+            if (!file.read(reinterpret_cast<char*>(buf), 5)) {
+                THROW("Unexpected EOF while reading JPEG SOF segment: " + image_path.string())
+            }
             size.h = (buf[1] << 8) | buf[2];
             size.w = (buf[3] << 8) | buf[4];
             break;
@@ -408,7 +416,6 @@ void YoloLabelMetaDataReader::read_all(const std::string &path) {
     }
 
     _yolo_label_metadata_read_time.end();
-    LOG("YOLO label metadata reader: processed " + std::to_string(files_processed) + " files, skipped " + std::to_string(files_skipped))
 }
 
 void YoloLabelMetaDataReader::print_map_contents() {
@@ -462,4 +469,3 @@ void YoloLabelMetaDataReader::release() {
     _map_img_sizes.clear();
     _relative_file_paths.clear();
 }
-
