@@ -99,10 +99,10 @@ void LutNode::init_lut_buffer() {
         for (size_t i = 0; i < _lut_size; i++)
             lut8u[i] = static_cast<uint8_t>(255 - i);  // Inverted LUT
     } else if (tensor_dtype == RocalTensorDataType::FP16) {
-        uint16_t *lut16f = static_cast<uint16_t *>(_lut_buffer);
+        vx_float16 *lut16f = static_cast<vx_float16 *>(_lut_buffer);
         for (size_t i = 0; i < _lut_size; i++) {
-            float temp_val = (255 - i) / 255.0f;
-            lut16f[i] = *reinterpret_cast<uint16_t*>(&temp_val);
+            float temp_val = (255.0f - static_cast<float>(i)) / 255.0f;
+            lut16f[i] = static_cast<vx_float16>(temp_val);
         }
     } else if (tensor_dtype == RocalTensorDataType::FP32) {
         float *lut32f = static_cast<float *>(_lut_buffer);
