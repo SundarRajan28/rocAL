@@ -574,6 +574,22 @@ int test(int test_case, int reader_type, const char *path, const char *outName, 
             rocalCreateTFReader(handle, path, true, key2, key8);
             decoded_output = rocalRawTFRecordSourceSingleShard(handle, path, key1, key8, color_format, 0, 1, false, true, false, decode_max_width, decode_max_height);
         } break;
+        case 29:  // YOLO label detection
+        {
+            std::cout << "Running YOLO LABEL READER" << std::endl;
+            pipeline_type = 2;
+            if (strcmp(rocal_data_path.c_str(), "") == 0) {
+                std::cout << "\n ROCAL_DATA_PATH env variable has not been set. ";
+                exit(0);
+            }
+            // labels are expected alongside coco_10_img sample in YOLO txt format
+            std::string labels_path = rocal_data_path + "/rocal_data/coco/coco_10_img/labels/";
+            rocalCreateYoloLabelReader(handle, labels_path.c_str(), path, true, false, true, true, false);
+            if (decode_max_height <= 0 || decode_max_width <= 0)
+                decoded_output = rocalJpegYoloLabelFileSource(handle, path, labels_path.c_str(), color_format, num_threads, false, false, false, ROCAL_USE_MAX_SIZE, decode_max_width, decode_max_height);
+            else
+                decoded_output = rocalJpegYoloLabelFileSource(handle, path, labels_path.c_str(), color_format, num_threads, false, false, false, ROCAL_USE_USER_GIVEN_SIZE_RESTRICTED, decode_max_width, decode_max_height);
+        } break;
         default: {
             std::cout << "Running IMAGE READER" << std::endl;
             pipeline_type = 1;

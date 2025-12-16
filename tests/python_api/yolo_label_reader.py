@@ -110,7 +110,7 @@ def build_ground_truth(images_dir, labels_dir):
                 img_path = cand
                 break
         if img_path is None:
-            print(f"[WARN] No image found for label {fname}")
+            print(f"No image found for label {fname}")
             continue
         with Image.open(img_path) as img:
             img_w, img_h = img.size
@@ -225,12 +225,12 @@ def compare(gt, rocal, tol):
     for img_idx, (stem, info) in enumerate(gt.items(), 1):
         gt_anns = info["anns"]
         if stem not in rocal:
-            print(f"[MISSING] {stem} not in rocAL results")
+            print(f"{stem} not in rocAL results")
             bad += 1
             continue
         ra_anns = rocal[stem]
         if len(gt_anns) != len(ra_anns):
-            print(f"[COUNT] {stem}: expected {len(gt_anns)}, got {len(ra_anns)}")
+            print(f"{stem}: expected {len(gt_anns)}, got {len(ra_anns)}")
             bad += 1
             continue
         all_match = True
@@ -238,7 +238,7 @@ def compare(gt, rocal, tol):
             e_cls, e_l, e_t, e_r, e_b = e
             a_cls, a_l, a_t, a_r, a_b = a
             if e_cls != a_cls:
-                print(f"[CLASS] {stem}[{ann_idx}]: expected {e_cls}, got {a_cls}")
+                print(f"{stem}[{ann_idx}]: expected {e_cls}, got {a_cls}")
                 all_match = False
             if (
                 abs(e_l - a_l) > tol
@@ -247,7 +247,7 @@ def compare(gt, rocal, tol):
                 or abs(e_b - a_b) > tol
             ):
                 print(
-                    f"[BBOX] {stem}[{ann_idx}]: "
+                    f"{stem}[{ann_idx}]: "
                     f"expected ({e_l:.2f},{e_t:.2f},{e_r:.2f},{e_b:.2f}), "
                     f"got ({a_l:.2f},{a_t:.2f},{a_r:.2f},{a_b:.2f})"
                 )
