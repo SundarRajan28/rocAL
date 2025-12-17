@@ -1736,7 +1736,6 @@ rocalColorToGreyscale(
     RocalTensor p_input,
     bool is_output,
     int subpixel_layout,
-    RocalTensorLayout output_layout,
     RocalTensorOutputType output_datatype) {
     Tensor* output = nullptr;
     ROCAL_INVALID_CONTEXT_ERR(p_context, output);
@@ -1744,34 +1743,28 @@ rocalColorToGreyscale(
     auto context = static_cast<Context*>(p_context);
     auto input = static_cast<Tensor*>(p_input);
     try {
-        RocalTensorlayout op_tensor_layout = static_cast<RocalTensorlayout>(output_layout);
-        if (op_tensor_layout == RocalTensorlayout::NONE)
-            op_tensor_layout = input->info().layout();
         RocalTensorDataType op_tensor_datatype = static_cast<RocalTensorDataType>(output_datatype);
         TensorInfo output_info = input->info();
-        auto dims = output_info.dims();
-        switch (op_tensor_layout) {
-            case RocalTensorlayout::NCHW:
-                if (dims.size() >= 2) dims[1] = 1;
-                break;
-            case RocalTensorlayout::NHWC:
-                if (dims.size() >= 4) dims[3] = 1;
-                break;
-            case RocalTensorlayout::NFCHW:
-                if (dims.size() >= 3) dims[2] = 1;
-                break;
-            case RocalTensorlayout::NFHWC:
-                if (dims.size() >= 5) dims[4] = 1;
-                break;
-            default:
-                break;
-        }
-        output_info.set_tensor_layout(op_tensor_layout);
         output_info.set_data_type(op_tensor_datatype);
-        output_info.set_dims(dims);
+        RocalTensorlayout input_layout = input->info().layout();
+        // RPP color_to_greyscale requires output layout to be NCHW with c=1
+        if (input_layout == RocalTensorlayout::NHWC) {
+            // First convert layout from NHWC to NCHW
+            output_info.set_tensor_layout(RocalTensorlayout::NCHW);
+            // Now dims are in NCHW format [N, C, H, W], set C=1 for greyscale
+            std::vector<size_t> dims = output_info.dims();
+            dims[1] = 1;
+            output_info.set_dims(dims);
+        } else if (input_layout == RocalTensorlayout::NCHW) {
+            std::vector<size_t> dims = output_info.dims();
+            dims[1] = 1;
+            output_info.set_dims(dims);
+        } else {
+            THROW("ColorToGreyscale only supports NHWC or NCHW layouts")
+        }
+        output_info.set_color_format(RocalColorFormat::U8);
         output = context->master_graph->create_tensor(output_info, is_output);
-        auto layout = subpixel_layout == 1 ? ColorToGreyscaleNode::SubpixelLayout::BGR
-                                           : ColorToGreyscaleNode::SubpixelLayout::RGB;
+        ColorToGreyscaleNode::SubpixelLayout layout = static_cast<ColorToGreyscaleNode::SubpixelLayout>(subpixel_layout);
         context->master_graph->add_node<ColorToGreyscaleNode>({input}, {output})->init(layout);
     } catch (const std::exception& e) {
         ROCAL_PRINT_EXCEPTION(context, e);

@@ -911,13 +911,11 @@ extern "C" RocalTensor ROCAL_API_CALL rocalPixelate(RocalContext context, RocalT
  * \param [in] input Input Rocal tensor
  * \param [in] is_output is the output tensor part of the graph output
  * \param [in] subpixel_layout source subpixel layout (0 for RGB, 1 for BGR)
- * \param [in] output_layout the layout of the output tensor
  * \param [in] output_datatype the data type of the output tensor
  * \return RocalTensor
  */
 extern "C" RocalTensor ROCAL_API_CALL rocalColorToGreyscale(RocalContext context, RocalTensor input,
                                                              bool is_output, int subpixel_layout = 0,
-                                                             RocalTensorLayout output_layout = ROCAL_NONE,
                                                              RocalTensorOutputType output_datatype = ROCAL_UINT8);
 
 /*! \brief Adjusts the exposure in images.
