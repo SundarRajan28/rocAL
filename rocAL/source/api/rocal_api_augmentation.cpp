@@ -1169,9 +1169,9 @@ RocalTensor ROCAL_API_CALL
 rocalGaussianNoiseFixed(
     RocalContext p_context,
     RocalTensor p_input,
+    bool is_output,
     float mean,
     float stddev,
-    bool is_output,
     int seed,
     RocalTensorLayout output_layout,
     RocalTensorOutputType output_datatype) {

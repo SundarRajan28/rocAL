@@ -1151,8 +1151,6 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
           py::return_value_policy::reference);
     m.def("colorJitter", &rocalColorJitter,
           py::return_value_policy::reference);
-    m.def("colorJitterFixed", &rocalColorJitterFixed,
-          py::return_value_policy::reference);
     m.def("spatter", &rocalSpatter,
           py::return_value_policy::reference);
     m.def("colorToGreyscale", &rocalColorToGreyscale,

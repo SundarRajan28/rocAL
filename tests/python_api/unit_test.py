@@ -48,13 +48,32 @@ def draw_patches(img, idx, args=None):
     # image is expected as a tensor, bboxes as numpy
     if args.fp16:
         img = (img).astype('uint8')
-    if not args.color_format:
+    if img.ndim == 3:
+        img = img[:, :, :, None]
+
+    def _infer_nchw(tensor):
+        if tensor.ndim != 4:
+            return False
+        # Heuristic: channel dimension is usually small (1/3) and spatial dims are larger.
+        c_first = tensor.shape[1] in (1, 3) and tensor.shape[-1] not in (1, 3)
+        c_last = tensor.shape[-1] in (1, 3) and tensor.shape[1] not in (1, 3)
+        if c_first and not c_last:
+            return True
+        if c_last and not c_first:
+            return False
+        # Ambiguous fallback to CLI expectation.
+        return bool(args) and (not args.color_format)
+
+    if _infer_nchw(img):
         img = img.transpose([0, 2, 3, 1])
+
+    channels = img.shape[-1] if img.ndim == 4 else 1
+    is_color = channels == 3
     images_list = []
     for im in img:
         images_list.append(im)
     img = cv2.vconcat(images_list)
-    if args.color_format:
+    if is_color:
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
     else:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
@@ -341,6 +360,19 @@ def main():
                                kernel_size=3,
                                output_layout=tensor_layout,
                                output_dtype=tensor_dtype)
+        elif augmentation_name == "gaussian_noise":
+            output = fn.gaussian_noise(images,
+                                       mean=0.0,
+                                       stddev=0.2,
+                                       seed=1255459,
+                                       output_layout=tensor_layout,
+                                       output_dtype=tensor_dtype)
+        elif augmentation_name == "shot_noise":
+            output = fn.shot_noise(images,
+                                   noise_factor=80.0,
+                                   seed=1255459,
+                                   output_layout=tensor_layout,
+                                   output_dtype=tensor_dtype)
         elif augmentation_name == "snp_noise":
             output = fn.snp_noise(images,
                                   p_noise=0.2,
@@ -381,6 +413,83 @@ def main():
                             hue=150.0,
                             output_layout=tensor_layout,
                             output_dtype=tensor_dtype)
+        elif augmentation_name == "channel_permute":
+            output = fn.channel_permute(images,
+                                        permutation_order=[2, 1, 0],
+                                        output_layout=tensor_layout,
+                                        output_dtype=tensor_dtype)
+        elif augmentation_name == "lut":
+            output = fn.lut(images,
+                            output_layout=tensor_layout,
+                            output_dtype=tensor_dtype)
+        elif augmentation_name == "posterize":
+            output = fn.posterize(images,
+                                  level_bits=3,
+                                  output_layout=tensor_layout,
+                                  output_dtype=tensor_dtype)
+        elif augmentation_name == "solarize":
+            output = fn.solarize(images,
+                                 threshold=0.5,
+                                 output_layout=tensor_layout,
+                                 output_dtype=tensor_dtype)
+        elif augmentation_name == "water":
+            output = fn.water(images,
+                              amplitude_x=2.0,
+                              amplitude_y=5.0,
+                              frequency_x=5.8,
+                              frequency_y=1.2,
+                              phase_x=10.0,
+                              phase_y=15.0,
+                              output_layout=tensor_layout,
+                              output_dtype=tensor_dtype)
+        elif augmentation_name == "jpeg_compression_distortion":
+            output = fn.jpeg_compression_distortion(images,
+                                                    quality=50,
+                                                    output_layout=tensor_layout,
+                                                    output_dtype=tensor_dtype)
+        elif augmentation_name == "color_jitter":
+            output = fn.color_jitter(images,
+                                     brightness=1.02,
+                                     contrast=1.1,
+                                     hue=0.02,
+                                     saturation=1.3,
+                                     output_layout=tensor_layout,
+                                     output_dtype=tensor_dtype)
+        elif augmentation_name == "spatter":
+            output = fn.spatter(images,
+                                red=65,
+                                green=50,
+                                blue=23,
+                                output_layout=tensor_layout,
+                                output_dtype=tensor_dtype)
+        elif augmentation_name == "color_to_greyscale":
+            output = fn.color_to_greyscale(images,
+                                           subpixel_layout=0,
+                                           output_dtype=tensor_dtype)
+        elif augmentation_name == "tensor_sum":
+            output = fn.tensor_sum(images,
+                                   output_layout=types.NONE,
+                                   output_dtype=types.FLOAT)
+        elif augmentation_name == "tensor_min":
+            output = fn.tensor_min(images,
+                                   output_layout=types.NONE,
+                                   output_dtype=types.UINT8)
+        elif augmentation_name == "tensor_max":
+            output = fn.tensor_max(images,
+                                   output_layout=types.NONE,
+                                   output_dtype=types.UINT8)
+        elif augmentation_name == "tensor_mean":
+            output = fn.tensor_mean(images,
+                                    output_layout=types.NONE,
+                                    output_dtype=types.FLOAT)
+        elif augmentation_name == "tensor_stddev":
+            mean_tensor = fn.tensor_mean(images,
+                                         output_layout=types.NONE,
+                                         output_dtype=types.FLOAT)
+            output = fn.tensor_stddev(images,
+                                      mean_tensor=mean_tensor,
+                                      output_layout=types.NONE,
+                                      output_dtype=types.FLOAT)
         elif augmentation_name == "saturation":
             output = fn.saturation(images,
                                    saturation=0.3,
@@ -520,7 +629,9 @@ def main():
                 if args.augmentation_name == "one_hot":
                     dump_meta_data(labels, args=args)
                 else:
-                    draw_patches(output_list[j], cnt, args=args)
+                    # Skip visualization for tensor reduction outputs which are not image-shaped
+                    if args.augmentation_name not in ["tensor_sum", "tensor_min", "tensor_max", "tensor_mean", "tensor_stddev"]:
+                        draw_patches(output_list[j], cnt, args=args)
                     cnt += len(output_list[j])
 
         data_loader.reset()

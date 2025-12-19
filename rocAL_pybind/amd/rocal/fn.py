@@ -371,19 +371,18 @@ def pixelate(*inputs, device=None, pixelate_percent=50.0, output_layout=types.NH
     return (pixelate_image)
 
 
-def color_to_greyscale(*inputs, subpixel_layout=0, device=None, output_layout=types.NCHW, output_dtype=types.UINT8):
+def color_to_greyscale(*inputs, subpixel_layout=0, device=None, output_dtype=types.UINT8):
     """!Converts color images to greyscale.
 
         @param inputs (list)                                                          The input image to convert.
         @param subpixel_layout (int, optional, default = 0)                           Source subpixel layout (0 for RGB, 1 for BGR).
         @param device (string, optional, default = None)                              Parameter unused for augmentation.
-        @param output_layout (int, optional, default = types.NCHW)                    Tensor layout for the augmentation output.
         @param output_dtype (int, optional, default = types.UINT8)                    Tensor dtype for the augmentation output.
 
         @return    Greyscale image.
     """
     kwargs_pybind = {"input_image": inputs[0], "is_output": False, "subpixel_layout": subpixel_layout,
-                     "output_layout": output_layout, "output_dtype": output_dtype}
+                     "output_dtype": output_dtype}
     greyscale_image = b.colorToGreyscale(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (greyscale_image)
@@ -1573,3 +1572,40 @@ def lut(*inputs, device=None, output_layout=types.NHWC, output_dtype=types.UINT8
     lut_image = b.lut(
         Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
     return (lut_image)
+
+
+def tensor_sum(*inputs, device=None, output_layout=types.NONE, output_dtype=types.FLOAT):
+    """!Computes tensor sum along channels for each image in the batch."""
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": False, "output_layout": output_layout, "output_datatype": output_dtype}
+    tensor_sum_output = b.tensorSum(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return tensor_sum_output
+
+
+def tensor_min(*inputs, device=None, output_layout=types.NONE, output_dtype=types.UINT8):
+    """!Computes tensor minimum per image."""
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": False, "output_layout": output_layout, "output_datatype": output_dtype}
+    tensor_min_output = b.tensorMin(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return tensor_min_output
+
+
+def tensor_max(*inputs, device=None, output_layout=types.NONE, output_dtype=types.UINT8):
+    """!Computes tensor maximum per image."""
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": False, "output_layout": output_layout, "output_datatype": output_dtype}
+    tensor_max_output = b.tensorMax(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return tensor_max_output
+
+
+def tensor_mean(*inputs, device=None, output_layout=types.NONE, output_dtype=types.FLOAT):
+    """!Computes tensor mean per image."""
+    kwargs_pybind = {"input_tensor": inputs[0], "is_output": False, "output_layout": output_layout, "output_datatype": output_dtype}
+    tensor_mean_output = b.tensorMean(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return tensor_mean_output
+
+
+def tensor_stddev(*inputs, mean_tensor=None, device=None, output_layout=types.NONE, output_dtype=types.FLOAT):
+    """!Computes tensor standard deviation per image using a precomputed mean tensor."""
+    input_tensor = inputs[0]
+    computed_mean = mean_tensor if mean_tensor is not None else tensor_mean(input_tensor, output_layout=output_layout, output_dtype=output_dtype)
+    kwargs_pybind = {"input_tensor": input_tensor, "mean_tensor": computed_mean, "is_output": False, "output_layout": output_layout, "output_datatype": output_dtype}
+    tensor_stddev_output = b.tensorStdDev(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
+    return tensor_stddev_output

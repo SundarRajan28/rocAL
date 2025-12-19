@@ -631,8 +631,8 @@ extern "C" RocalTensor ROCAL_API_CALL rocalGaussianNoise(RocalContext context, R
  * \return RocalTensor
  */
 extern "C" RocalTensor ROCAL_API_CALL rocalGaussianNoiseFixed(RocalContext context, RocalTensor input,
-                                                              float mean, float stddev,
-                                                              bool is_output, int seed = 0,
+                                                              bool is_output,
+                                                              float mean = 0.0, float stddev = 1.0, int seed = 0,
                                                               RocalTensorLayout output_layout = ROCAL_NONE,
                                                               RocalTensorOutputType output_datatype = ROCAL_UINT8);
 
