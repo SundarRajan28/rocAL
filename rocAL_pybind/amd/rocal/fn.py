@@ -1320,46 +1320,6 @@ def tensor_mul_scalar_float(*inputs, scalar=1.0, output_datatype=types.FLOAT):
     tensor_mul_scalar_float = b.tensorMulScalar(Pipeline._current_pipeline._handle ,*(kwargs_pybind.values()))
     return tensor_mul_scalar_float
 
-def tensor_sum(*inputs, is_output=False, output_layout=types.NONE, output_dtype=types.FLOAT):
-    """
-    Computes tensor sum per image.
-    """
-    kwargs_pybind = {"input_tensor": inputs[0], "is_output": is_output, "output_layout": output_layout, "output_dtype": output_dtype}
-    tensor_sum_output = b.tensorSum(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
-    return tensor_sum_output
-
-def tensor_min(*inputs, is_output=False, output_layout=types.NONE, output_dtype=types.UINT8):
-    """
-    Computes tensor minimum per image.
-    """
-    kwargs_pybind = {"input_tensor": inputs[0], "is_output": is_output, "output_layout": output_layout, "output_dtype": output_dtype}
-    tensor_min_output = b.tensorMin(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
-    return tensor_min_output
-
-def tensor_max(*inputs, is_output=False, output_layout=types.NONE, output_dtype=types.UINT8):
-    """
-    Computes tensor maximum per image.
-    """
-    kwargs_pybind = {"input_tensor": inputs[0], "is_output": is_output, "output_layout": output_layout, "output_dtype": output_dtype}
-    tensor_max_output = b.tensorMax(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
-    return tensor_max_output
-
-def tensor_mean(*inputs, is_output=False, output_layout=types.NONE, output_dtype=types.FLOAT):
-    """
-    Computes tensor mean per image.
-    """
-    kwargs_pybind = {"input_tensor": inputs[0], "is_output": is_output, "output_layout": output_layout, "output_dtype": output_dtype}
-    tensor_mean_output = b.tensorMean(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
-    return tensor_mean_output
-
-def tensor_stddev(input_tensor, mean_tensor, is_output=False, output_layout=types.NONE, output_dtype=types.FLOAT):
-    """
-    Computes tensor standard deviation per image using supplied means.
-    """
-    kwargs_pybind = {"input_tensor": input_tensor, "mean_tensor": mean_tensor, "is_output": is_output, "output_layout": output_layout, "output_dtype": output_dtype}
-    tensor_stddev_output = b.tensorStdDev(Pipeline._current_pipeline._handle, *(kwargs_pybind.values()))
-    return tensor_stddev_output
-
 def nonsilent_region(*inputs, cutoff_db = -60, reference_power = 0.0, reset_interval = 8192, window_length = 2048):
     """
     Performs leading and trailing silence detection in an audio buffer.
