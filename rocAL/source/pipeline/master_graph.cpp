@@ -24,6 +24,7 @@ THE SOFTWARE.
 #include <omp.h>
 #include <vx_ext_amd.h>
 #include <VX/vx_types.h>
+#include <algorithm>
 #include <cstring>
 #include <sched.h>
 #include <typeinfo>
@@ -459,6 +460,477 @@ MasterGraph::reset() {
     _output_routine_finished_processing = false;
     start_processing();
     return Status::OK;
+}
+
+// Disjoint-set (union-find) helper functions for connected components
+int MasterGraph::disjoint_set_group(int &x, int new_id) {
+    int old = x;
+    x = new_id;
+    return old;
+}
+
+int MasterGraph::disjoint_find(int *items, int x) {
+    int x0 = x;
+    // find the root label
+    for (;;) {
+        int g = disjoint_get_group(items[x]);
+        if (g == x)
+            break;
+        x = g;
+    }
+    int r = x;
+    // path compression: assign all intermediate labels to the root
+    x = x0;
+    while (x != disjoint_get_group(items[x])) {
+        x0 = disjoint_set_group(items[x], r);
+        x = x0;
+    }
+    return r;
+}
+
+int MasterGraph::disjoint_merge(int *items, int x, int y) {
+    x = disjoint_find(items, x);
+    y = disjoint_find(items, y);
+    if (x < y) {
+        disjoint_set_group(items[y], x);
+        return x;
+    } else if (y < x) {
+        disjoint_set_group(items[x], y);
+        return y;
+    } else {
+        // already merged
+        return x;
+    }
+}
+
+void MasterGraph::merge_row(int *label_base, const int *in1, const int *in2, int *out1, int *out2, unsigned n) {
+    int bg_label = -1;
+    int prev1 = bg_label;
+    int prev2 = bg_label;
+    for (unsigned i = 0; i < n; i++) {
+        int o1 = out1[i];
+        int o2 = out2[i];
+        if (o1 != prev1 || o2 != prev2) {
+            if (o1 != bg_label) {
+                if (in1[i] == in2[i]) {
+                    disjoint_merge(label_base, o1, o2);
+                }
+            }
+            prev1 = o1;
+            prev2 = o2;
+        }
+    }
+}
+
+void MasterGraph::filter_by_label(int *in_row, int *out_row, unsigned N, int label) {
+    for (unsigned i = 0; i < N; i++) {
+        out_row[i] = in_row[i] == label;
+    }
+}
+
+int MasterGraph::compact_rows(int *in, unsigned height, unsigned width) {
+    constexpr int kBackground = -1;
+    int64_t volume = static_cast<int64_t>(height) * static_cast<int64_t>(width);
+    if (volume <= 0) {
+        return 0;
+    }
+
+    // Find pass (union-find path compression) similar to DALI's connected_components::CompactLabels.
+    // This updates the per-pixel labels to their root labels with minimal calls to disjoint_find.
+    std::set<int> roots;
+    int prev = kBackground;
+    int remapped = kBackground;
+    for (int64_t i = 0; i < volume; i++) {
+        int curr = in[i];
+        if (curr == kBackground) {
+            prev = kBackground;
+            continue;
+        }
+        if (curr != prev) {
+            prev = curr;
+            remapped = disjoint_find(in, static_cast<int>(i));
+            roots.insert(remapped);
+        } else {
+            in[i] = remapped;
+        }
+    }
+
+    // Remap root labels to a compact 0..N-1 range.
+    std::map<int, int> labelmap;
+    int counter = 0;
+    for (int root : roots) {
+        labelmap[root] = counter++;
+    }
+
+    prev = kBackground;
+    remapped = kBackground;
+    for (int64_t i = 0; i < volume; i++) {
+        int curr = in[i];
+        if (curr == kBackground) {
+            prev = kBackground;
+            continue;
+        }
+        if (curr != prev) {
+            prev = curr;
+            remapped = labelmap[curr];
+        }
+        in[i] = remapped;
+    }
+
+    return counter;
+}
+
+void MasterGraph::label_row(const int *label_base, const int *in_row, int *out_row, unsigned length) {
+    int curr_label = -1;
+    int bg_label = -1;
+    int prev = 0;
+    for (unsigned i = 0; i < length; i++) {
+        if (in_row[i] != prev) {
+            if (in_row[i] != 0) {
+                curr_label = out_row + i - label_base;
+            } else {
+                curr_label = bg_label;
+            }
+        }
+        out_row[i] = curr_label;
+        prev = in_row[i];
+    }
+}
+
+bool MasterGraph::hit(std::vector<unsigned> &hits, unsigned idx) {
+    unsigned flag = (1u << (idx & 31));
+    unsigned &h = hits[idx >> 5];
+    bool ret = h & flag;
+    h |= flag;
+    return ret;
+}
+
+void MasterGraph::get_label_boundingboxes(std::vector<std::vector<std::pair<unsigned, unsigned>>> &boxes,
+                                          std::vector<std::pair<unsigned, unsigned>> ranges,
+                                          std::vector<unsigned> hits,
+                                          int *in,
+                                          std::vector<unsigned> origin,
+                                          unsigned width) {
+    for (auto &mask : hits) {
+        mask = 0u;  // mark all labels as not found in this row
+    }
+
+    const unsigned nboxes = ranges.size();
+    int background = -1;
+    for (unsigned i = 0; i < width; i++) {
+        if (in[i] != background) {
+            // We make a "hole" in the label indices for the background.
+            int skip_bg = (background >= 0 && in[i] >= background);
+            unsigned idx = static_cast<unsigned>(in[i]) - skip_bg;
+            // deliberate use of unsigned overflow to detect negative labels as out-of-range
+            if (idx < nboxes) {
+                if (!hit(hits, idx)) {
+                    ranges[idx].first = i;
+                }
+                ranges[idx].second = i;
+            }
+        }
+    }
+
+    std::pair<unsigned, unsigned> lo = std::make_pair(0, 0);
+    std::pair<unsigned, unsigned> hi = std::make_pair(0, 0);
+    lo.first = origin[0];
+    hi.first = origin[0] + 1;
+    lo.second = origin[1];
+    hi.second = origin[1] + 1;
+    const int d = 1;
+    for (unsigned word = 0; word < hits.size(); word++) {
+        unsigned mask = hits[word];
+        unsigned i = 32 * word;
+        while (mask) {
+            if ((mask & 0xffu) == 0) {  // skip 8 labels if not set
+                mask >>= 8;
+                i += 8;
+                continue;
+            }
+            if (mask & 1) {  // label found? mark it
+                lo.second = ranges[i].first + origin[d];
+                hi.second = (ranges[i].second + origin[d] + 1);  // one past the index found in this function
+                if (boxes[i].empty()) {
+                    // empty box - create a new one
+                    boxes[i].push_back(lo);
+                    boxes[i].push_back(hi);
+                } else {
+                    // expand existing (element-wise min/max, not lexicographic)
+                    boxes[i][0].first = std::min(boxes[i][0].first, lo.first);
+                    boxes[i][0].second = std::min(boxes[i][0].second, lo.second);
+                    boxes[i][1].first = std::max(boxes[i][1].first, hi.first);
+                    boxes[i][1].second = std::max(boxes[i][1].second, hi.second);
+                }
+            }
+            mask >>= 1;
+            i++;  // skip one label
+        }
+    }
+}
+
+int MasterGraph::pick_box(std::vector<std::vector<std::pair<unsigned, unsigned>>> &boxes, std::mt19937 &rng, int k_largest) {
+    int n = boxes.size();
+    if (n <= 0)
+        return -1;
+
+    if (k_largest > 0 && k_largest < n) {
+        // Sort by volume (descending) and pick from k_largest
+        std::vector<std::pair<int64_t, int>> vol_idx;
+        vol_idx.resize(n);
+        for (int i = 0; i < n; i++) {
+            if (boxes[i].size() < 2) {
+                vol_idx[i] = {0, i};
+                continue;
+            }
+            // For 2D: width * height
+            int64_t width = static_cast<int64_t>(boxes[i][1].second) - static_cast<int64_t>(boxes[i][0].second);
+            int64_t height = static_cast<int64_t>(boxes[i][1].first) - static_cast<int64_t>(boxes[i][0].first);
+            int64_t volume = width * height;
+            vol_idx[i] = {-volume, i};  // negative for descending sort
+        }
+        std::sort(vol_idx.begin(), vol_idx.end());
+        std::uniform_int_distribution<int> dist(0, std::min(n, k_largest) - 1);
+        return vol_idx[dist(rng)].second;
+    } else {
+        std::uniform_int_distribution<int> dist(0, n - 1);
+        return dist(rng);
+    }
+}
+
+TensorList *MasterGraph::get_random_object_bbox(rocalTensorList *input, RocalRandomObjectBBoxFormat format,
+                                                int k_largest, float foreground_prob, bool cache_objects) {
+    init_semantic_rngs();
+    if (_output_random_object_bbox.size() != 0) {
+        for (unsigned i = 0; i < _user_batch_size; i++) {
+            _output_random_object_bbox[i].clear();
+        }
+    }
+    _output_random_object_bbox.clear();
+    _output_random_object_bbox.resize(_user_batch_size, std::vector<unsigned>(4, 0));
+
+    std::uniform_real_distribution<float> foreground_dist(0.0f, 1.0f);
+
+    for (unsigned id = 0; id < _user_batch_size; id++) {
+        int *in_mask_buffer = (int *)(input->at(id)->buffer());
+        unsigned width = input->at(id)->dims().at(0);
+        unsigned height = input->at(id)->dims().at(1);
+        unsigned buffer_size = width * height;
+        auto &rng = _random_object_bbox_rngs[id];
+
+        // Check foreground probability - if random value >= foreground_prob, return full image
+        bool select_foreground = foreground_dist(rng) < foreground_prob;
+
+        if (!select_foreground) {
+            // Return full image bounding box
+            switch (format) {
+                case ROCAL_OUT_BOX:
+                case ROCAL_OUT_STARTEND:
+                    _output_random_object_bbox[id][0] = 0;
+                    _output_random_object_bbox[id][1] = 0;
+                    _output_random_object_bbox[id][2] = height;
+                    _output_random_object_bbox[id][3] = width;
+                    break;
+                case ROCAL_OUT_ANCHORSHAPE:
+                    _output_random_object_bbox[id][0] = 0;
+                    _output_random_object_bbox[id][1] = 0;
+                    _output_random_object_bbox[id][2] = height;
+                    _output_random_object_bbox[id][3] = width;
+                    break;
+                default:
+                    assert(!"Unreachable code");
+            }
+            continue;
+        }
+
+        // Check cache if enabled
+        RandomObjectBBoxCacheEntry *cache_entry = nullptr;
+        size_t hash = 0;
+        if (cache_objects) {
+            hash = fast_hash_buffer(in_mask_buffer, buffer_size * sizeof(int));
+            hash = hash_combine(hash, static_cast<size_t>(width));
+            hash = hash_combine(hash, static_cast<size_t>(height));
+            cache_entry = &_random_object_bbox_cache[hash];
+        }
+
+        // Find unique labels
+        std::set<int> unique_labels;
+        if (cache_entry && !cache_entry->labels.empty()) {
+            unique_labels = cache_entry->labels;
+        } else {
+            int prev_label = 0;
+            for (unsigned i = 0; i < buffer_size; i++) {
+                if (prev_label != in_mask_buffer[i] && in_mask_buffer[i] != 0) {
+                    unique_labels.insert(in_mask_buffer[i]);
+                }
+                prev_label = in_mask_buffer[i];
+            }
+            if (cache_entry) {
+                cache_entry->labels = unique_labels;
+            }
+        }
+
+        // If no foreground labels found, return full image
+        if (unique_labels.empty()) {
+            switch (format) {
+                case ROCAL_OUT_BOX:
+                case ROCAL_OUT_STARTEND:
+                    _output_random_object_bbox[id][0] = 0;
+                    _output_random_object_bbox[id][1] = 0;
+                    _output_random_object_bbox[id][2] = height;
+                    _output_random_object_bbox[id][3] = width;
+                    break;
+                case ROCAL_OUT_ANCHORSHAPE:
+                    _output_random_object_bbox[id][0] = 0;
+                    _output_random_object_bbox[id][1] = 0;
+                    _output_random_object_bbox[id][2] = height;
+                    _output_random_object_bbox[id][3] = width;
+                    break;
+                default:
+                    assert(!"Unreachable code");
+            }
+            continue;
+        }
+
+        // Select a random label from the set (FIX: properly select from actual labels, not a range)
+        auto label_dist = std::uniform_int_distribution<size_t>(0, unique_labels.size() - 1);
+        auto it = std::next(unique_labels.begin(), label_dist(rng));
+        int label_selected = (*it);
+
+        // Check if we have cached boxes for this label
+        std::vector<std::vector<std::pair<unsigned, unsigned>>> boxes;
+        int nbox = 0;
+
+        if (cache_entry && cache_entry->total_boxes.count(label_selected)) {
+            // Use cached data
+            nbox = cache_entry->total_boxes[label_selected];
+            if (nbox > 0 && cache_entry->Get(boxes, label_selected)) {
+                // Boxes loaded from cache
+            }
+        }
+
+        if (nbox == 0 || boxes.empty()) {
+            // Compute connected components
+            std::vector<int> in_filtered_buffer(buffer_size);
+            std::vector<int> out_mask_buffer(buffer_size, -1);
+
+            filter_by_label(in_mask_buffer, in_filtered_buffer.data(), buffer_size, label_selected);
+
+            int *in_filtered_row = in_filtered_buffer.data();
+            int *out_row = out_mask_buffer.data();
+
+            for (unsigned i = 0; i < height; i++) {
+                label_row(out_mask_buffer.data(), in_filtered_row, out_row, width);
+                if (i >= 1) {
+                    merge_row(out_mask_buffer.data(), in_filtered_row - width, in_filtered_row, out_row - width, out_row, width);
+                }
+                in_filtered_row += width;
+                out_row += width;
+            }
+
+            nbox = compact_rows(out_mask_buffer.data(), height, width);
+
+            if (nbox == 0) {
+                switch (format) {
+                    case ROCAL_OUT_BOX:
+                    case ROCAL_OUT_STARTEND:
+                        _output_random_object_bbox[id][0] = 0;
+                        _output_random_object_bbox[id][1] = 0;
+                        _output_random_object_bbox[id][2] = height;
+                        _output_random_object_bbox[id][3] = width;
+                        break;
+                    case ROCAL_OUT_ANCHORSHAPE:
+                        _output_random_object_bbox[id][0] = 0;
+                        _output_random_object_bbox[id][1] = 0;
+                        _output_random_object_bbox[id][2] = height;
+                        _output_random_object_bbox[id][3] = width;
+                        break;
+                    default:
+                        assert(!"Unreachable code");
+                }
+                if (cache_entry) {
+                    cache_entry->total_boxes[label_selected] = 0;
+                }
+                continue;
+            }
+
+            // Get bounding boxes for each connected component
+            std::vector<std::pair<unsigned, unsigned>> ranges(nbox);
+            std::vector<unsigned> hits((nbox / 32 + !!(nbox % 32)));
+            boxes.resize(nbox);
+
+            out_row = out_mask_buffer.data();
+            for (unsigned i = 0; i < height; i++) {
+                get_label_boundingboxes(boxes, ranges, hits, out_row, std::vector<unsigned>{i, 0}, width);
+                out_row += width;
+            }
+
+            // Cache the results
+            if (cache_entry) {
+                cache_entry->total_boxes[label_selected] = nbox;
+                cache_entry->Put(label_selected, boxes);
+            }
+        }
+
+        // Pick a box using k_largest if specified
+        int pick_box_id = pick_box(boxes, rng, k_largest);
+
+        if (pick_box_id < 0 || pick_box_id >= static_cast<int>(boxes.size()) || boxes[pick_box_id].size() < 2) {
+            // No valid box found, return full image
+            switch (format) {
+                case ROCAL_OUT_BOX:
+                case ROCAL_OUT_STARTEND:
+                    _output_random_object_bbox[id][0] = 0;
+                    _output_random_object_bbox[id][1] = 0;
+                    _output_random_object_bbox[id][2] = height;
+                    _output_random_object_bbox[id][3] = width;
+                    break;
+                case ROCAL_OUT_ANCHORSHAPE:
+                    _output_random_object_bbox[id][0] = 0;
+                    _output_random_object_bbox[id][1] = 0;
+                    _output_random_object_bbox[id][2] = height;
+                    _output_random_object_bbox[id][3] = width;
+                    break;
+                default:
+                    assert(!"Unreachable code");
+            }
+            continue;
+        }
+
+        auto &selected_box = boxes[pick_box_id];
+        switch (format) {
+            case ROCAL_OUT_BOX:
+                _output_random_object_bbox[id][0] = selected_box[0].first;
+                _output_random_object_bbox[id][2] = selected_box[1].first;
+                _output_random_object_bbox[id][1] = selected_box[0].second;
+                _output_random_object_bbox[id][3] = selected_box[1].second;
+                break;
+            case ROCAL_OUT_ANCHORSHAPE:
+                // FIX: Calculate shape as hi - lo (not lo - hi)
+                _output_random_object_bbox[id][0] = selected_box[0].first;   // anchor row
+                _output_random_object_bbox[id][1] = selected_box[0].second;  // anchor col
+                _output_random_object_bbox[id][2] = selected_box[1].first - selected_box[0].first;   // height (hi.row - lo.row)
+                _output_random_object_bbox[id][3] = selected_box[1].second - selected_box[0].second; // width (hi.col - lo.col)
+                break;
+            case ROCAL_OUT_STARTEND:
+                _output_random_object_bbox[id][0] = selected_box[0].first;
+                _output_random_object_bbox[id][2] = selected_box[1].first;
+                _output_random_object_bbox[id][1] = selected_box[0].second;
+                _output_random_object_bbox[id][3] = selected_box[1].second;
+                break;
+            default:
+                assert(!"Unreachable code");
+        }
+    }
+    // Get bbox buffer from ring buffer
+    auto random_tensor_dims = {(size_t)4};
+    for (unsigned i = 0; i < _user_batch_size; i++) {
+        _random_object_bbox_list[i]->set_dims(random_tensor_dims);
+        auto random_data_buffers = (unsigned int *)_output_random_object_bbox[i].data();
+        _random_object_bbox_list[i]->set_mem_handle((void *)random_data_buffers);
+    }
+
+    return &_random_object_bbox_list;
 }
 
 size_t
@@ -1107,11 +1579,30 @@ TensorListVector* MasterGraph::create_coco_meta_data_reader(const char *source_p
 
     TensorInfo default_matches_info;
     TensorInfo default_mask_info;
+    TensorInfo default_random_mask_pixel_info, default_select_mask_polygon_info, default_random_object_bbox_info;
     if (metadata_type == MetaDataType::PolygonMask) {
         dims = {MAX_MASK_BUFFER, 1};
         default_mask_info = TensorInfo(std::move(dims), _mem_type, RocalTensorDataType::FP32);  // Create default mask Info
         default_mask_info.set_metadata();
         _meta_data_buffer_size.emplace_back(_user_batch_size * default_mask_info.data_size());
+        dims = {MAX_MASK_BUFFER, 1};
+        default_select_mask_polygon_info = TensorInfo(std::move(dims), _mem_type, RocalTensorDataType::FP32);
+        default_select_mask_polygon_info.set_metadata();
+        _meta_data_buffer_size.emplace_back(_user_batch_size * default_select_mask_polygon_info.data_size());
+    } else if (metadata_type == MetaDataType::PixelwiseMask) {
+        auto max_img_size = _meta_data_reader->get_max_size();
+        dims = {max_img_size.first, max_img_size.second};
+        default_mask_info = TensorInfo(std::move(dims), _mem_type, RocalTensorDataType::INT32);
+        default_mask_info.set_metadata();
+        _meta_data_buffer_size.emplace_back(_user_batch_size * default_mask_info.data_size());
+        dims = {2};
+        default_random_mask_pixel_info = TensorInfo(dims, _mem_type, RocalTensorDataType::INT32);
+        default_random_mask_pixel_info.set_metadata();
+        _meta_data_buffer_size.emplace_back(_user_batch_size * default_random_mask_pixel_info.data_size());
+        dims = {4};
+        default_random_object_bbox_info = TensorInfo(std::move(dims), _mem_type, RocalTensorDataType::INT32);
+        default_random_object_bbox_info.set_metadata();
+        _meta_data_buffer_size.emplace_back(_user_batch_size * default_random_object_bbox_info.data_size());
     }
     if (is_box_iou_matcher) {
         _is_box_iou_matcher = true;
@@ -1127,11 +1618,20 @@ TensorListVector* MasterGraph::create_coco_meta_data_reader(const char *source_p
         auto bbox_info = default_bbox_info;
         _labels_tensor_list.push_back(new Tensor(labels_info, "label_" + get_tensor_uid()));
         _bbox_tensor_list.push_back(new Tensor(bbox_info, "bbox_" + get_tensor_uid()));
-        if (metadata_type == MetaDataType::PolygonMask) {
+        if (metadata_type == MetaDataType::PolygonMask || metadata_type == MetaDataType::PixelwiseMask) {
             auto mask_info = default_mask_info;
             _mask_tensor_list.push_back(new Tensor(mask_info, "mask_" + get_tensor_uid()));
+            if (metadata_type == MetaDataType::PolygonMask) {
+                auto select_mask_polygon_info = default_select_mask_polygon_info;
+                _select_mask_polygon_list.push_back(new Tensor(select_mask_polygon_info, "select_mask_polygon_" + get_tensor_uid()));
+            } else {
+                auto random_mask_pixel_info = default_random_mask_pixel_info;
+                _random_mask_pixel_list.push_back(new Tensor(random_mask_pixel_info, "random_mask_pixel_" + get_tensor_uid()));
+                auto random_object_bbox_info = default_random_object_bbox_info;
+                _random_object_bbox_list.push_back(new Tensor(random_object_bbox_info, "random_object_bbox_" + get_tensor_uid()));
+            }
         }
-        if(is_box_iou_matcher) {
+        if (is_box_iou_matcher) {
             auto matches_info = default_matches_info;
             _matches_tensor_list.push_back(new Tensor(matches_info, "matches_" + get_tensor_uid()));
         }
@@ -1139,12 +1639,176 @@ TensorListVector* MasterGraph::create_coco_meta_data_reader(const char *source_p
     _ring_buffer.init_metadata(RocalMemType::HOST, _meta_data_buffer_size);
     _metadata_output_tensor_list.emplace_back(&_labels_tensor_list);
     _metadata_output_tensor_list.emplace_back(&_bbox_tensor_list);
-    if (metadata_type == MetaDataType::PolygonMask)
+    if (metadata_type == MetaDataType::PolygonMask || metadata_type == MetaDataType::PixelwiseMask)
         _metadata_output_tensor_list.emplace_back(&_mask_tensor_list);
+    if (metadata_type == MetaDataType::PolygonMask)
+        _metadata_output_tensor_list.emplace_back(&_select_mask_polygon_list);
+    if (metadata_type == MetaDataType::PixelwiseMask) {
+        _metadata_output_tensor_list.emplace_back(&_random_mask_pixel_list);
+        _metadata_output_tensor_list.emplace_back(&_random_object_bbox_list);
+    }
     if(is_box_iou_matcher)
         _metadata_output_tensor_list.emplace_back(&_matches_tensor_list);
 
     return &_metadata_output_tensor_list;
+}
+
+void MasterGraph::set_random_mask_pixel_config(bool is_foreground, int value, bool is_threshold) {
+    _random_mask_pixel_value = value;
+    _is_random_mask_pixel_foreground = is_foreground;
+    _is_random_mask_pixel_threshold = is_threshold;
+}
+
+void MasterGraph::init_semantic_rngs() {
+    const unsigned seed = ParameterFactory::instance()->get_seed();
+    if (_semantic_rng_seed == seed &&
+        _random_mask_pixel_rngs.size() == _user_batch_size &&
+        _random_object_bbox_rngs.size() == _user_batch_size) {
+        return;
+    }
+    _semantic_rng_seed = seed;
+    _random_mask_pixel_rngs.resize(_user_batch_size);
+    _random_object_bbox_rngs.resize(_user_batch_size);
+
+    for (size_t i = 0; i < _user_batch_size; i++) {
+        std::seed_seq seq_pixel{seed, 0x4D504958u, static_cast<unsigned>(i)};  // "MPIX"
+        std::seed_seq seq_bbox{seed, 0x4F424258u, static_cast<unsigned>(i)};   // "OBBX"
+        _random_mask_pixel_rngs[i].seed(seq_pixel);
+        _random_object_bbox_rngs[i].seed(seq_bbox);
+    }
+}
+
+int64_t MasterGraph::find_pixel(const std::vector<int> &start, const std::vector<int> &foreground_count, int64_t val, int count) {
+    if (val < 0 || val >= count || start.empty() || foreground_count.empty() || start.size() != foreground_count.size()) {
+        return -1;
+    }
+    auto it = std::upper_bound(foreground_count.begin(), foreground_count.end(), val);
+    if (it == foreground_count.begin()) {
+        return -1;
+    }
+    size_t idx = static_cast<size_t>(it - foreground_count.begin() - 1);
+    return start[idx] + (val - foreground_count[idx]);
+}
+
+TensorList *MasterGraph::get_random_mask_pixel(rocalTensorList *input) {
+    init_semantic_rngs();
+    output_random_mask_pixel.clear();
+    output_random_mask_pixel.resize(_user_batch_size * 2);
+    const int nthreads = static_cast<int>(std::max<size_t>(1, std::min(_cpu_num_threads, _user_batch_size)));
+    if (_is_random_mask_pixel_foreground == false) {
+#pragma omp parallel for num_threads(nthreads)
+        for (unsigned i = 0; i < _user_batch_size; i++) {
+            auto &rng = _random_mask_pixel_rngs[i];
+            auto width = input->at(i)->dims().at(0);
+            auto height = input->at(i)->dims().at(1);
+            auto row = std::uniform_int_distribution<int64_t>(0, height - 1)(rng);
+            auto col = std::uniform_int_distribution<int64_t>(0, width - 1)(rng);
+            output_random_mask_pixel[i * 2] = row;
+            output_random_mask_pixel[i * 2 + 1] = col;
+        }
+    } else {
+        if (_is_random_mask_pixel_threshold) {
+#pragma omp parallel for num_threads(nthreads)
+            for (unsigned i = 0; i < _user_batch_size; i++) {
+                std::vector<int> start;
+                std::vector<int> foreground_count;
+                unsigned id = 0;
+                int count = 0;
+                auto &rng = _random_mask_pixel_rngs[i];
+                int *mask_buffer = (int *)(input->at(i)->buffer());
+                auto width = input->at(i)->dims().at(0);
+                auto height = input->at(i)->dims().at(1);
+                auto buffer_size = width * height;
+                while (id < buffer_size) {
+                    if (mask_buffer[id] <= _random_mask_pixel_value) {
+                        id++;
+                    } else {
+                        start.push_back(id++);
+                        foreground_count.push_back(count++);
+                        while (id < buffer_size && mask_buffer[id] > _random_mask_pixel_value) {
+                            id++;
+                            count++;
+                        }
+                    }
+                }
+                if (count != 0) {
+                    auto dist = std::uniform_int_distribution<int64_t>(0, count - 1);
+                    auto flat_idx = find_pixel(start, foreground_count, dist(rng), count);
+                    if (flat_idx < 0) {
+                        auto row = std::uniform_int_distribution<int64_t>(0, height - 1)(rng);
+                        auto col = std::uniform_int_distribution<int64_t>(0, width - 1)(rng);
+                        output_random_mask_pixel[i * 2] = row;
+                        output_random_mask_pixel[i * 2 + 1] = col;
+                        continue;
+                    }
+                    auto row = flat_idx / width;
+                    auto col = flat_idx % width;
+                    output_random_mask_pixel[i * 2] = row;
+                    output_random_mask_pixel[i * 2 + 1] = col;
+                } else {
+                    auto row = std::uniform_int_distribution<int64_t>(0, height - 1)(rng);
+                    auto col = std::uniform_int_distribution<int64_t>(0, width - 1)(rng);
+                    output_random_mask_pixel[i * 2] = row;
+                    output_random_mask_pixel[i * 2 + 1] = col;
+                }
+            }
+        } else {
+#pragma omp parallel for num_threads(nthreads)
+            for (unsigned i = 0; i < _user_batch_size; i++) {
+                std::vector<int> start;
+                std::vector<int> foreground_count;
+                unsigned id = 0;
+                int count = 0;
+                auto &rng = _random_mask_pixel_rngs[i];
+                int *mask_buffer = (int *)(input->at(i)->buffer());
+                auto width = input->at(i)->dims().at(0);
+                auto height = input->at(i)->dims().at(1);
+                auto buffer_size = width * height;
+                while (id < buffer_size) {
+                    if (mask_buffer[id] != _random_mask_pixel_value) {
+                        id++;
+                    } else {
+                        start.push_back(id++);
+                        foreground_count.push_back(count++);
+                        while (id < buffer_size && mask_buffer[id] == _random_mask_pixel_value) {
+                            id++;
+                            count++;
+                        }
+                    }
+                }
+                if (count != 0) {
+                    auto dist = std::uniform_int_distribution<int64_t>(0, count - 1);
+                    auto flat_idx = find_pixel(start, foreground_count, dist(rng), count);
+                    if (flat_idx < 0) {
+                        auto row = std::uniform_int_distribution<int64_t>(0, height - 1)(rng);
+                        auto col = std::uniform_int_distribution<int64_t>(0, width - 1)(rng);
+                        output_random_mask_pixel[i * 2] = row;
+                        output_random_mask_pixel[i * 2 + 1] = col;
+                        continue;
+                    }
+                    auto row = flat_idx / width;
+                    auto col = flat_idx % width;
+                    output_random_mask_pixel[i * 2] = row;
+                    output_random_mask_pixel[i * 2 + 1] = col;
+                } else {
+                    auto row = std::uniform_int_distribution<int64_t>(0, height - 1)(rng);
+                    auto col = std::uniform_int_distribution<int64_t>(0, width - 1)(rng);
+                    output_random_mask_pixel[i * 2] = row;
+                    output_random_mask_pixel[i * 2 + 1] = col;
+                }
+            }
+        }
+    }
+
+    auto random_data_buffers = (unsigned int *)output_random_mask_pixel.data();  // Get bbox buffer from ring buffer
+    auto random_tensor_dims = {(size_t)2};
+    for (unsigned i = 0; i < _user_batch_size; i++) {
+        _random_mask_pixel_list[i]->set_dims(random_tensor_dims);
+        _random_mask_pixel_list[i]->set_mem_handle((void *)random_data_buffers);
+        random_data_buffers += 2;
+    }
+
+    return &_random_mask_pixel_list;
 }
 
 TensorListVector* MasterGraph::create_tf_record_meta_data_reader(const char *source_path, MetaDataReaderType reader_type, MetaDataType label_type, std::map<std::string, std::string> feature_key_map) {
@@ -1574,7 +2238,7 @@ TensorList *MasterGraph::bbox_meta_data() {
     return &_bbox_tensor_list;
 }
 
-TensorList *MasterGraph::mask_meta_data() {
+TensorList *MasterGraph::mask_meta_data(bool is_polygon_mask) {
     if (!_meta_data_reader && _loaders_count > 1)
         THROW("Metadata reader is not compatible with multiple loaders")
     if (_ring_buffer.level() == 0) {
@@ -1582,14 +2246,81 @@ TensorList *MasterGraph::mask_meta_data() {
         THROW("No meta data has been loaded")
     }
     auto meta_data_buffers = (unsigned char *)_ring_buffer.get_meta_read_buffers()[2];  // Get mask buffer from ring buffer
-    auto mask_cords = _ring_buffer.get_meta_data().second->get_mask_cords_batch();
-    for (unsigned i = 0; i < _mask_tensor_list.size(); i++) {
-        _mask_tensor_list[i]->set_dims({mask_cords[i].size(), 1});
-        _mask_tensor_list[i]->set_mem_handle((void *)meta_data_buffers);
-        meta_data_buffers += _mask_tensor_list[i]->info().data_size();
+
+    if (is_polygon_mask) {
+        auto mask_cords = _ring_buffer.get_meta_data().second->get_mask_cords_batch();
+        for (unsigned i = 0; i < _mask_tensor_list.size(); i++) {
+            _mask_tensor_list[i]->set_dims({mask_cords[i].size(), 1});
+            _mask_tensor_list[i]->set_mem_handle((void *)meta_data_buffers);
+            meta_data_buffers += _mask_tensor_list[i]->info().data_size();
+        }
+    } else {
+        auto mask_cords = _ring_buffer.get_meta_data().second->get_pixelwise_labels_batch();
+        auto img_sizes = _ring_buffer.get_meta_data().second->get_img_sizes_batch();
+        for (unsigned i = 0; i < _mask_tensor_list.size(); i++) {
+            _mask_tensor_list[i]->set_dims({(long unsigned int)img_sizes[i].w, (long unsigned int)img_sizes[i].h});
+            _mask_tensor_list[i]->set_mem_handle((void *)meta_data_buffers);
+            meta_data_buffers += _mask_tensor_list[i]->info().data_size();
+        }
     }
 
     return &_mask_tensor_list;
+}
+
+TensorList *MasterGraph::get_select_mask_polygon(rocalTensorList *mask_data,
+                                                 std::vector<std::vector<int>> polygon_counts,
+                                                 std::vector<std::vector<std::vector<int>>> vertices_counts,
+                                                 std::vector<int> mask_ids,
+                                                 std::vector<std::vector<int>> &sel_vertices_counts,
+                                                 std::vector<std::vector<int>> &sel_mask_ids,
+                                                 bool reindex_mask) {
+    std::set<int> unique_ids(mask_ids.begin(), mask_ids.end());
+    if (unique_ids.size() != mask_ids.size())
+        THROW("mask_ids should not contain duplicates");
+    if (_output_select_mask_polygon.size() != 0) {
+        for (unsigned i = 0; i < _user_batch_size; i++)
+            _output_select_mask_polygon[i].clear();
+    }
+    _output_select_mask_polygon.clear();
+    _output_select_mask_polygon.resize(_user_batch_size);
+    sel_vertices_counts.resize(_user_batch_size);
+    sel_mask_ids.resize(_user_batch_size);
+    std::map<int, int> mask_id_to_idx;
+    for (size_t idx = 0; idx < mask_ids.size(); idx++) {
+        mask_id_to_idx[mask_ids[idx]] = static_cast<int>(idx);
+    }
+    for (unsigned i = 0; i < _user_batch_size; i++) {
+        float *mask_buffer = (float *)mask_data->at(i)->buffer();
+        auto objects = polygon_counts[i].size();
+        for (auto mask_id : mask_ids) {
+            if (mask_id < 0 || static_cast<size_t>(mask_id) >= objects)
+                THROW("Requested mask id " + std::to_string(mask_id) + " is not present in the sample");
+        }
+        size_t buffer_offset = 0;
+        for (unsigned obj_idx = 0; obj_idx < objects; obj_idx++) {
+            bool select_object = unique_ids.find(static_cast<int>(obj_idx)) != unique_ids.end();
+            for (unsigned poly_idx = 0; poly_idx < polygon_counts[i][obj_idx]; poly_idx++) {
+                auto vertex_count = vertices_counts[i][obj_idx][poly_idx];
+                if (select_object) {
+                    for (unsigned v = 0; v < vertex_count; v++) {
+                        _output_select_mask_polygon[i].push_back(mask_buffer[buffer_offset + v]);
+                    }
+                    sel_vertices_counts[i].push_back(vertex_count);
+                    if (reindex_mask)
+                        sel_mask_ids[i].push_back(mask_id_to_idx[static_cast<int>(obj_idx)]);
+                    else
+                        sel_mask_ids[i].push_back(static_cast<int>(obj_idx));
+                }
+                buffer_offset += vertex_count;
+            }
+        }
+    }
+    for (unsigned i = 0; i < _user_batch_size; i++) {
+        auto select_mask_buffers = (float *)_output_select_mask_polygon[i].data();
+        _select_mask_polygon_list[i]->set_dims({_output_select_mask_polygon[i].size(), 1});
+        _select_mask_polygon_list[i]->set_mem_handle((void *)select_mask_buffers);
+    }
+    return &_select_mask_polygon_list;
 }
 
 TensorList *MasterGraph::matched_index_meta_data() {

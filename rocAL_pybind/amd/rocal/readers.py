@@ -28,16 +28,19 @@ from amd.rocal.pipeline import Pipeline
 import amd.rocal.types as types
 
 
-def coco(annotations_file='', ltrb=True, masks=False, ratio=False, avoid_class_remapping=False,
+def coco(annotations_file='', ltrb=True, polygon_masks=False, ratio=False, avoid_class_remapping=False, is_foreground=False, value=0, is_threshold=True,
          pixelwise_masks=False, is_box_encoder=False, is_box_iou_matcher=False, aspect_ratio_grouping=False, stick_to_shard=False, pad_last_batch=False):
     """!Creates a COCOReader node.
 
         @param annotations_file         Path to the COCO annotations file.
         @param ltrb                     Whether bounding box coordinates are provided in (left, top, right, bottom) format.
-        @param masks                    Whether to read polygon masks from COCO annotations.
+        @param polygon_masks            Whether to read polygon mask metadata from COCO annotations.
         @param ratio                    Whether bounding box coordinates are provided in normalized format.
         @param avoid_class_remapping    Specifies if class remapping should be avoided.
-        @param pixelwise_masks          Whether to read mask data and generate pixel-wise masks.
+        @param pixelwise_masks          Whether to read pixelwise mask metadata from COCO annotations.
+        @param is_foreground            If pixelwise_masks is True, select pixels from foreground (value > 0) for random pixel selection.
+        @param value                    If pixelwise_masks is True, used by random pixel selection when is_threshold is False (equals) or True (greater than).
+        @param is_threshold             If pixelwise_masks is True, random pixel selection uses (mask_value > value) if True else (mask_value == value).
         @param is_box_encoder           Whether to enable box encoder in the pipeline.
         @param is_box_iou_matcher       Whether to enable box IOU matcher in the pipeline.
         @param aspect_ratio_grouping    Whether to enable aspect ratio grouping in the pipeline.
@@ -50,10 +53,14 @@ def coco(annotations_file='', ltrb=True, masks=False, ratio=False, avoid_class_r
     # Output
     labels = []
     bboxes = []
+    if pixelwise_masks:
+        kwargs_pybind = {"is_foreground": is_foreground, "value":value, "is_threshold":is_threshold}
+        b.setRandomPixelMaskConfig(Pipeline._current_pipeline._handle,*(kwargs_pybind.values()))
     kwargs_pybind = {
         "source_path": annotations_file,
         "is_output": True,
-        "mask": masks,
+        "is_polygon_mask": polygon_masks,
+        "is_pixelwise_mask": pixelwise_masks,
         "ltrb": ltrb,
         "is_box_encoder": is_box_encoder,
         "avoid_class_remapping": avoid_class_remapping,
