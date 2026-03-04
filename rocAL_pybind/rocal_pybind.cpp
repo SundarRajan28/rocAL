@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include <iostream>
 #include <pybind11/embed.h>
 #include <pybind11/eval.h>
+#include <stdexcept>
 #if ENABLE_DLPACK
     #include <dlpack/dlpack.h>
 #endif
@@ -345,6 +346,14 @@ PYBIND11_MODULE(rocal_pybind, m) {
         }
         return py::bytes(serialized_ckpt);
     }, "Returns the serialized checkpoint as Python bytes");
+    // Restore pipeline state from a checkpoint bytes object.
+    m.def("restoreFromCheckpoint", [](RocalContext context, py::bytes checkpoint_bytes) {
+        std::string ckpt = checkpoint_bytes;  // Checkpoint blob copied from Python.
+        RocalStatus status = rocalRestoreFromSerializedCheckpoint(context, ckpt.data(), ckpt.size());
+        if (status != ROCAL_OK) {
+            throw std::runtime_error("Failed to restore from checkpoint");
+        }
+    }, "Restores the pipeline from a checkpoint bytes object");
     // rocal_api_types.h
     py::class_<TimingInfo>(m, "TimingInfo")
         .def_readwrite("load_time", &TimingInfo::load_time)
@@ -788,7 +797,6 @@ py::class_<rocalListOfTensorList>(m, "rocalListOfTensorList")
         .export_values();
     py::enum_<RocalDecoderType>(types_m, "RocalDecoderType", "Rocal Decoder Type")
         .value("DECODER_TJPEG", ROCAL_DECODER_TJPEG)
-        .value("DECODER_OPENCV", ROCAL_DECODER_OPENCV)
         .value("DECODER_VIDEO_FFMPEG_SW", ROCAL_DECODER_VIDEO_FFMPEG_SW)
         .value("DECODER_AUDIO_GENERIC", ROCAL_DECODER_AUDIO_GENERIC)
         .value("DECODER_VIDEO_ROCDECODE", ROCAL_DECODER_VIDEO_ROCDECODE)

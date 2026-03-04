@@ -167,6 +167,8 @@ public:
     std::string& get_serialized_string() { return _serialized_pipeline; }
     void deserialize(rocal_proto::PipelineDef *pipe_def);
     Tensor *create_operator_output(const rocal_proto::InputOutput &output, bool is_loader_output = false);
+    //! Restore pipeline state from a serialized checkpoint blob.
+    void restore_from_serialized_checkpoint(const std::string &serialized_ckpt);
     //! Serialize the current pipeline state into an internal checkpoint buffer.
     void get_serialized_checkpoint(size_t &serialized_ckpt_string_size);
     //! Returns the last serialized checkpoint buffer.
@@ -260,6 +262,9 @@ private:
     BoxIouMatcherInfo _iou_matcher_info;
 #if ENABLE_HIP
     BoxEncoderGpu *_box_encoder_gpu = nullptr;
+#endif
+#if ENABLE_HIPFILE
+    bool _hipfile_driver_opened = false;  //!< Tracks whether hipFileDriverOpen() was called. Only true when ROCAL_USE_HIPFILE=1.
 #endif
     TimingDbg _rb_block_if_empty_time, _rb_block_if_full_time;
     std::vector<std::shared_ptr<PipelineOperator>> _pipeline_operators;     // Contains the info of all the operators present in the pipeline
